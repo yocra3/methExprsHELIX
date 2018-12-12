@@ -1,0 +1,161 @@
+---
+title: "Comparison methExprs models"
+author: "Carlos Ruiz"
+date: "26 de octubre de 2018"
+output: html_document
+---
+
+```{r setup, message=FALSE}
+library(MEAL)
+library(minfi)
+library(limma)
+```
+
+
+```{r load}
+load("data_res2/all_output.RData")
+mod2 <- all_output
+
+load("data_res4/all_output.Rdata")
+mod4 <- all_output
+```
+
+We fit two models. The difference is whether we included cell composition in the models:
+- Model A: model adjusted for sex, cohort and age
+- Model C: model adjusted for sex, cohort, age and cell composition.
+
+## Compare p-values
+```{r}
+plot(-log10(mod2$p.value), -log10(mod4$p.value), xlab = "Model C", 
+     ylab = "Model A", main = "-log10 p-values comparative")
+```
+
+We observe some CpG-TC pairs that are significant in model A that we lose when we adjust for cell composition (model C).
+
+We considered pairs with a p-value smaller than 1e-8 as significant.
+
+```{r select different significant pairs}
+selpairs <- -log10(mod2$p.value) < 8 & -log10(mod4$p.value) > 8
+sum(selpairs)
+```
+
+8698 pairs were significant in model A but not significant in model C
+
+## Compare Estimates
+```{r}
+plot(mod2$Estimate, mod4$Estimate, xlab = "Model C", 
+     ylab = "Model A", main = "Estimates comparative")
+
+plot(mod2[selpairs, "Estimate"], mod4[selpairs, "Estimate"], 
+     xlab = "Model C", ylab = "Model A", 
+     main = "Estimates comparative (pairs model A not in model C)")
+```
+
+Pairs in model A not in model C have very different estimates between the models. These differences are not found when considering all pairs.
+
+## Summary pairs model A
+```{r}
+mod4sel <- mod4[selpairs, ]
+mod4com <- subset(mod4[!selpairs, ], p.value < 1e-8)
+sum(mod4$p.value < 1e-8)
+```
+
+We found 22058 eQTMs in model A. Of those, 8698 were not detected in model C. 
+
+## Explore CpGs
+```{r}
+cpgsel <- unique(mod4sel$CpG)
+cpgcom <- unique(mod4com$CpG)
+length(cpgsel)
+length(cpgcom)
+mean(cpgsel %in% cpgcom)
+```
+
+Pairs shared between the models include 7708 unique CpGs and pairs specific of model A include 5773 unique CpGs. Interestingly, there very small overlap between both sets of CpGs (< 10 %).
+
+```{r}
+load("gset_sm_1.RData")
+
+
+model <- model.matrix(~NK + Bcell + CD4T + CD8T + Eos + Neu + 
+                        Mono + cohort + e3_sex + age_sample_years,
+                      data = colData(gset))
+lm <- lmFit(getBeta(gset), model)
+lm <- eBayes(lm)
+cpgRes <- topTable(lm, coef = 2:7, n = Inf)
+selRes <- cpgRes[cpgsel, ]
+selRes$adj.P.Val <- p.adjust(selRes$P.Value)
+mean(selRes$adj.P.Val < 0.05)
+mean(selRes[!cpgsel %in% cpgcom, "adj.P.Val"] < 0.05)
+```
+
+DNA methylation of 98% of the CpGs found in pairs specific of model A were associated to cell counts. This percentage raises to 99% when CpGs present in common pairs are removed. 
+
+```{r}
+library(FlowSorted.Blood.450k)
+
+selTab <- FlowSorted.Blood.450k.compTable[cpgsel, ]
+selTab$adj.P.Val <- p.adjust(selTab$p.value)
+mean(selTab$adj.P.Val < 0.05, na.rm = TRUE)
+```
+
+We find a similar result when using the association results between CpGs and cell types from reference blood cell types.
+
+```{r}
+comRes <- cpgRes[cpgcom, ]
+comRes$adj.P.Val <- p.adjust(comRes$P.Value)
+mean(comRes$adj.P.Val < 0.05)
+mean(comRes[!cpgcom %in% cpgsel, "adj.P.Val"] < 0.05)
+```
+
+When applying the same to CpGs from common pairs, only 63% were correlated with cell types. 
+
+```{r}
+comTab <- FlowSorted.Blood.450k.compTable[cpgcom, ]
+comTab$adj.P.Val <- p.adjust(comTab$p.value)
+mean(comTab$adj.P.Val < 0.05, na.rm = TRUE)
+```
+
+Using data from reference blood cell types, the percentage is even lower (40%).
+
+## Explore TCs
+```{r}
+TCsel <- unique(mod4sel$TC)
+TCcom <- unique(mod4com$TC)
+length(TCsel)
+length(TCcom)
+mean(TCsel %in% TCcom)
+```
+
+Pairs shared between the models include 3437 unique TCs and pairs specific of model A include 1788 unique TCs. In this case, there was a higher overlap between both sets of TCs (34%).
+
+```{r}
+load("summ_exp_sm_res2.RData")
+
+model <- model.matrix(~NK + Bcell + CD4T + CD8T + Eos + Neu + 
+                        Mono + cohort + e3_sex + age_sample_years,
+                      data = colData(se_res))
+lmExp <- lmFit(assay(se_res), model)
+lmExp <- eBayes(lmExp)
+TCRes <- topTable(lmExp, coef = 2:7, n = Inf)
+
+selTCRes <- TCRes[TCsel, ]
+selTCRes$adj.P.Val <- p.adjust(selTCRes$P.Value)
+mean(selTCRes$adj.P.Val < 0.05)
+mean(selTCRes[!TCsel %in% TCcom, "adj.P.Val"] < 0.05)
+```
+
+Gene expression of 90% of the TCs found in pairs specific of model A were associated to cell counts. This percentage raises to 95% when TCs present in common pairs are removed. 
+
+```{r}
+comTCRes <- TCRes[TCcom, ]
+comTCRes$adj.P.Val <- p.adjust(comTCRes$P.Value)
+mean(comTCRes$adj.P.Val < 0.05)
+mean(comTCRes[!TCcom %in% TCsel, "adj.P.Val"] < 0.05)
+```
+
+When applying the same to CpGs from common pairs, only 23% were correlated with cell types. 
+
+## Conclussion
+
+We run the association between DNA methylation and gene expression using two different models. In the first, we adjusted for age, sex and cohort. In the second, we additionally adjusted for cell composition. In the first model, we detected many more CpGs associated with gene expression than in the second model. CpGs and TCs associaed with the first model but not with the second, we strongly associated with cell composition. 
