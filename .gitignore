@@ -4,6 +4,7 @@
 
 # Session Data files
 .RData
+*.Rdata
 
 # Example code in package build process
 *-Ex.R
@@ -42,3 +43,4 @@ archive/
 # Data files
 *.csv
 *.txt
+*.tsv
