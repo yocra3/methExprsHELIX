@@ -5,32 +5,21 @@
 library(Biobase)
 library(SummarizedExperiment)
 
-setwd("/Lacie_CRW10023/HELIX_analyses/expr_met_SM")
-load("anno_expr_sm_2.RData")
-names(anno)
-dim(anno)
+## Load SummarizedExperiment
+load("./data/transcriptome_subcohort_notfitr_inclsex_v3.RData")
+gexp <- transcriptome_subcohort_notfitr_inclsex
 
-load("/Lacie_CRW10023/HELIX_preproc/gene_expression/Final_data/transcriptome_subcohort_f1_residuals3_v2.Rdata")
-eset <- transcriptome_subcohort_f1_residuals3
-feat <- featureData(eset)
-eanno <- pData(feat)
-names(eanno)
-dim(eanno)
+## Load common IDs
+load("results/preprocessFiles/comIds.Rdata")
 
-# Filter IDs
-load("ids.RData")
-eset <- eset[,ids] #832
+# Select common IDs
+gexp <- gexp[ , comIds]
 
-# Filter TCs
-# eanno: original expression set annotation
-# anno: filtered annotation (chr gl, chr M and haplotypes)
-eset <- eset[rownames(anno),] #59130
-
-# Adding anno
-pData(feat) <- anno
-featureData(eset) <- feat
+## Remove probes with low call rate
+load("./data/badProbes.Rdata")
+gexp <- gexp[fData(gexp)$fil1 == "no", ]
 
 # Making SE
-se <- makeSummarizedExperimentFromExpressionSet(eset)
-save(se, file = "summ_exp_sm_1.RData")
+se <- makeSummarizedExperimentFromExpressionSet(gexp)
+save(se, file = "results/preprocessFiles/Expression_SE_raw.RData")
 
