@@ -18,10 +18,12 @@ arg <- commandArgs(trailingOnly = T)
 
 ## Load methylation ####
 methy <- arg[1]
+message("methy File: ", methy)
 load(methy) # gset
 
 ## Load Expression ####
 exprs <- arg[2]
+message("Gexp File: ", exprs)
 load(exprs) # se
 
 # Check data consistency ####
