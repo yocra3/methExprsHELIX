@@ -25,7 +25,7 @@ exprs <- arg[2]
 load(exprs) # se
 
 # Check data consistency ####
-stopifnot(colnames(methy) == colnames(se), "Sample ids in methylation dataset must be equal to sample ids in expression dataset")
+stopifnot(colnames(gset) == colnames(se), "Sample ids in methylation dataset must be equal to sample ids in expression dataset")
 
 out_fold <- arg[3]
 
