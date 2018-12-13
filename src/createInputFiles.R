@@ -18,17 +18,14 @@ arg <- commandArgs(trailingOnly = T)
 
 ## Load methylation ####
 methy <- arg[1]
-message("methy File: ", methy)
 load(methy) # gset
 
 ## Load Expression ####
 exprs <- arg[2]
-message("Gexp File: ", exprs)
 load(exprs) # se
 
 # Check data consistency ####
-stopifnot(colnames(gset) == colnames(se), "Sample ids in methylation dataset must be equal to sample ids in expression dataset")
-
+stopifnot(all(colnames(gset) == colnames(se)))
 out_fold <- arg[3]
 
 print("Data loaded")
