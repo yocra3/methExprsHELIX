@@ -3,7 +3,6 @@
 #' linear models
 #' @param methy Path with the GenomicRatioSet
 #' @param exprs Path with the SummarizedExperiment
-#' @param model Model used in the linear model (see Define linear models section)
 #' @param out_fold Path with the folder to output the results
 #' @example 
 #' Rscript divide_datasets.R ./data/gset_sm_res1.RData ./data/summ_exp_sm_res1.RData ./results/model1
@@ -16,31 +15,31 @@ arg <- commandArgs(trailingOnly = T)
 
 ## Load methylation ####
 methy <- arg[1]
-load(methy) # gset_res
+load(methy) # gset
 
 ## Load Expression ####
 exprs <- arg[2]
-load(exprs) # se_res
+load(exprs) # se
 
 # Check data consistency ####
-stopifnot(colnames(gset_res) == colnames(se_res), "Sample ids in methylation dataset must be equal to sample ids in expression dataset")
+stopifnot(colnames(gset) == colnames(se), "Sample ids in methylation dataset must be equal to sample ids in expression dataset")
 
 out_fold <- arg[3]
 
 print("Data loaded")
 
 ## Get data matrices
-ma <- assays(gset_res)$Beta # methylation assay
-ea <- assays(se_res)$exprs # expression assay
+ma <- assays(gset)$Beta # methylation assay
+ea <- assays(se)$exprs # expression assay
 
 ## Get probes ranges
-mr <- rowRanges(gset_res)[,0] # methylation ranges
-er <- rowRanges(se_res)[,0] # expression ranges
+mr <- rowRanges(gset)[,0] # methylation ranges
+er <- rowRanges(se)[,0] # expression ranges
 
 # Automatic subsetting + saving
-count = 0
-for (x in 1:22) {
-  chr <- paste('chr', x, sep = '')
+count <- 0
+chrs <- seqnames(rowRanges(gset))
+for (chr in chrs) {
   mrsub <- mr[seqnames(mr) == chr]
   ersub <- er[seqnames(er) == chr]
   fo <- findOverlaps(mrsub + 5e5, ersub)
@@ -53,9 +52,9 @@ for (x in 1:22) {
   overlaps <- cbind(cpg, tc)
   masub <- ma[cpgnames,]
   easub <- ea[tcnames,]
-  save(overlaps, file = paste0(out_fold, "/", 'overlaps', x, '.RData'))
-  save(masub, file = paste0(out_fold, "/", 'masub', x, '.RData'))
-  save(easub, file = paste0(out_fold, "/", 'easub', x, '.RData'))
+  save(overlaps, file = paste0(out_fold, "/", 'overlaps', chr, '.RData'))
+  save(masub, file = paste0(out_fold, "/", 'masub', chr, '.RData'))
+  save(easub, file = paste0(out_fold, "/", 'easub', chr, '.RData'))
   print(paste(x, nrow(overlaps), sep = ': '))
   count <- count + nrow(overlaps)
 }
