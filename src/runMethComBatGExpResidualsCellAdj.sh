@@ -21,7 +21,7 @@ gexpInput="${resFolder}/gexpInput.Rdata"
 mkdir $resFolder
 
 ## Generate Input data for analysis
-Rscript src/createInput.R $meth $gexp $resFolder autosomes
+Rscript src/createInputFiles.R $meth $gexp $resFolder autosomes
 
 ## Divide data for analysis
 Rscript src/divide_data.R $methInput $gexpInput $resFolder
