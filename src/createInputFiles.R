@@ -11,8 +11,8 @@
 ###############################################################################
 
 ## Load libraries ####
-library('minfi')
-library(SummarizedExperiment)
+library('minfi', quietly = TRUE)
+library(SummarizedExperiment, quietly = TRUE)
 
 arg <- commandArgs(trailingOnly = T)
 
