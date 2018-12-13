@@ -5,4 +5,5 @@ Structure of the project:
 
 * data: Raw data from the project
 * results: Intermediate and result files
+  + preprocessFiles: Objects with methylation and Gene expression to used in the analyses.
 * src: Scripts used to analyze the data
