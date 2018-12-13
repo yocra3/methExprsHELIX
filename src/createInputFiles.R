@@ -38,7 +38,7 @@ if ("autosomes" %in% args){
 }
 
 ## Remove probes in sexual chromosomes
-if ("autosomes" %in% args){
+if ("sex-stratify" %in% args){
   gsetall <- gset
   gset <- gsetall[, gsetall$e3_sex == "male"]
   save(gset, file = paste0(out_fold, "/methyInputMale.Rdata"))
