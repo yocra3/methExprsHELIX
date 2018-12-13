@@ -31,13 +31,13 @@ out_fold <- arg[3]
 print("Data loaded")
 
 ## Remove probes in sexual chromosomes
-if ("autosomes" %in% args){
+if ("autosomes" %in% arg){
   gset <- gset[!seqnames(rowRanges(gset)) %in% c("chrX", "chrY"), ]
   se <- se[!seqnames(rowRanges(se)) %in% c("chrX", "chrY"), ]
 }
 
 ## Remove probes in sexual chromosomes
-if ("sex-stratify" %in% args){
+if ("sex-stratify" %in% arg){
   gsetall <- gset
   gset <- gsetall[, gsetall$e3_sex == "male"]
   save(gset, file = paste0(out_fold, "/methyInputMale.Rdata"))
