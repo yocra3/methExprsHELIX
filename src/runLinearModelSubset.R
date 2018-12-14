@@ -9,6 +9,8 @@
 #' Rscript runLinearModelSubset ./data/model1 1 cell results/model1
 ###############################################################################
 library("parallel", verbose = FALSE)
+library("S4Vectors", verbose = FALSE)
+
 arg <- commandArgs(trailingOnly = T)
 data_fold <- arg[1]
 
@@ -32,9 +34,9 @@ models <- c(cell = easub[tc,] ~ masub[cpg,] + pheno$cohort + pheno$e3_sex +
               pheno$CD4T_6 + pheno$CD8T_6 + pheno$Gran_6 + pheno$Mono_6, 
             nocell = easub[tc,] ~ masub[cpg,] + pheno$cohort + pheno$e3_sex +
               pheno$age_sample_years)
-model <- args[3]
+model <- arg[3]
 stopifnot(model %in% names(models))
-model <- models[models]
+model <- models[[model]]
 
 out_fold <- arg[4]
 
@@ -53,7 +55,7 @@ if (length(arg) == 5){
 resCorr <- function(x) {
   cpg <- overlaps[x, 1]
   tc <- overlaps[x, 2]
-  fit <- lm(model)
+  fit <- lm(model, data = environment())
   return(c(cpg,
            tc,
            summary(fit)$coef[2,1],
