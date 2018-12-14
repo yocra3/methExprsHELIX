@@ -8,7 +8,7 @@
 #' @example 
 #' Rscript runLinearModelSubset ./data/model1 1 cell results/model1
 ###############################################################################
-library("parallel")
+library("parallel", verbose = FALSE)
 arg <- commandArgs(trailingOnly = T)
 data_fold <- arg[1]
 
@@ -23,9 +23,9 @@ load(c)
 load(paste0(data_fold, "/", "pheno.RData"))
 
 # Check data consistency ####
-stopifnot(colnames(masub) == colnames(easub), "Sample ids in methylation matrix must be equal to sample ids in expression matrix")
-stopifnot(rownames(pheno) == colnames(masub), "Sample ids in phenotype matrix must be equal to sample ids in expression matrix")
-
+stopifnot(colnames(masub) == colnames(easub), 
+          rownames(pheno) == colnames(masub))
+          
 # Define Linear models ####
 models <- c(cell = easub[tc,] ~ masub[cpg,] + pheno$cohort + pheno$e3_sex +
               pheno$age_sample_years  + pheno$NK_6 + pheno$Bcell_6 +
@@ -33,7 +33,7 @@ models <- c(cell = easub[tc,] ~ masub[cpg,] + pheno$cohort + pheno$e3_sex +
             nocell = easub[tc,] ~ masub[cpg,] + pheno$cohort + pheno$e3_sex +
               pheno$age_sample_years)
 model <- args[3]
-stopifnot(model %in% names(models), paste("Third argument must in:", names(models)))
+stopifnot(model %in% names(models))
 model <- models[models]
 
 out_fold <- arg[4]

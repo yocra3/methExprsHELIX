@@ -2,7 +2,7 @@
 #' Create GenomicRatioSet for analysis (methylation)
 ###############################################################################
 
-library('minfi')
+library('minfi', verbose = FALSE)
 
 # Loading GRSet
 load("./data/methylome_subcohort_ComBatSlide_6cells_notfitr_v3.Rdata")

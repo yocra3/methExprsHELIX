@@ -2,12 +2,12 @@
 #' Create SummarizedExperiment for analysis (Gene Expression)
 ###############################################################################
 
-library(Biobase)
-library(SummarizedExperiment)
-library(sva)
-library(isva)
-library(limma)    
-library(SmartSVA) 
+library(Biobase, verbose = FALSE)
+library(SummarizedExperiment, verbose = FALSE)
+library(sva, verbose = FALSE)
+library(isva, verbose = FALSE)
+library(limma, verbose = FALSE)    
+library(SmartSVA, verbose = FALSE) 
 
 ## Load SummarizedExperiment
 load("./data/transcriptome_subcohort_notfitr_inclsex_v3.RData")
