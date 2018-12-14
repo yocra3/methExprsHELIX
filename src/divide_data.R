@@ -32,12 +32,12 @@ ma <- assays(gset)$Beta # methylation assay
 ea <- assays(se)$exprs # expression assay
 
 ## Get probes ranges
-mr <- rowRanges(gset)[,0] # methylation ranges
-er <- rowRanges(se)[,0] # expression ranges
+mr <- rowRanges(gset)[,0] # methylation ranges removing metadata
+er <- rowRanges(se)[,0] # expression ranges removing metadata
 
 # Automatic subsetting + saving
 count <- 0
-chrs <- seqnames(rowRanges(gset))
+chrs <- unique(as.character(seqnames(rowRanges(gset))))
 for (chr in chrs) {
   mrsub <- mr[seqnames(mr) == chr]
   ersub <- er[seqnames(er) == chr]
