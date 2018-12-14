@@ -59,6 +59,10 @@ for (chr in chrs) {
 }
 print(count)
 
+## Save phenotypes
+pheno <- colData(gset)
+save(pheno, file = paste0(out_fold, "/pheno.RData"))
+
 ########################### Test with CHROMOSOME 22
 # mrsub <- mr[seqnames(mr) == 'chr22'] # mr subset
 # ersub <- er[seqnames(er) == 'chr22'] # er subset
