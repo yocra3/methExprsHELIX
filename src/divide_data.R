@@ -54,7 +54,7 @@ for (chr in chrs) {
   save(overlaps, file = paste0(out_fold, "/", 'overlaps', chr, '.RData'))
   save(masub, file = paste0(out_fold, "/", 'masub', chr, '.RData'))
   save(easub, file = paste0(out_fold, "/", 'easub', chr, '.RData'))
-  print(paste(x, nrow(overlaps), sep = ': '))
+  print(paste(chr, nrow(overlaps), sep = ': '))
   count <- count + nrow(overlaps)
 }
 print(count)
