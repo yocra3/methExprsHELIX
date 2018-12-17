@@ -4,7 +4,7 @@
 |------------------------------------------------------------------------|--------------------------------------------------|-------------|-----------------------------------------------------------------------------------------------------------------------------| 
 | transcriptome_subcohort_notfitr_inclsex_v3.RData | Gene expression data without filtering any probe | 2018/12/12 |  ~/data/WS_HELIX/HELIX_preproc/gene_expression/Final_data/|
 | methylome_subcohort_ComBatSlide_6cells_notfitr_v3.Rdata | DNA methylation with all probes after ComBat | 2018/12/12 | ~/data/WS_HELIX/HELIX_preproc/methylation/Final_data/ |
-| Illumina450K_MQtlMappingFile_Original37_v.1.2_HistoneMarkAndDNASE1.txt | CpG annotation in DHS regions  | 2018/12/12 | ~/data/WS_HELIX/HELIX_preproc/methylation/annotation/ | 
-| Illumina450K_MQtlMappingFile_Original37_v.1.2_incStates15.txt | CpG annotation in Chromatine States | 2018/12/12 | ~/data/WS_HELIX/HELIX_preproc/methylation/annotation/ |
+| dhs.csv | CpG annotation in DHS regions  | 2018/12/17 | ~/data/WS_HELIX/HELIX_preproc/methylation/annotation/ | 
+| chrom15.csv | CpG annotation in Chromatine States | 2018/12/17 | ~/data/WS_HELIX/HELIX_preproc/methylation/annotation/ |
 badprobes.Rdata | CpG probes crosshibridizing, with SNPs or in sexual chromosomes | 2018/12/12 | ~/data/WS_HELIX/HELIX_preproc/methylation/QC_CRA/
 HELIX_GWAS_1000G_ethnicity_20181212.xlsx | Ethnicity inferred from peddy | 2018/12/17 | ~/data/WS_HELIX/HELIX_preproc/gwas/QC/
