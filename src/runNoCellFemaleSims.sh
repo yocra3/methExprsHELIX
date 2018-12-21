@@ -47,6 +47,6 @@ mkdir $simFolder
 for i in {1..22}
 do
   echo $i
-  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="'$model'" out_fold="'$resFolder'" ${SLURM_ARRAY_TASK_ID}' src/runLinearModelSubset.R $outFolder/modchr$i.out
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="'$model'" out_fold="'$resFolder'" ${SLURM_ARRAY_TASK_ID}' src/runLinearModelSubset.R $simFolder/modchr$i.out
 done
-R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="'$model'" out_fold="'$resFolder'" ${SLURM_ARRAY_TASK_ID}' src/runLinearModelSubset.R $outFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="'$model'" out_fold="'$resFolder'" ${SLURM_ARRAY_TASK_ID}' src/runLinearModelSubset.R $simFolder/modchrX.out
