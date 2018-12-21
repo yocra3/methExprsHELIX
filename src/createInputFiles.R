@@ -18,7 +18,7 @@ arg <- commandArgs(trailingOnly = T)
 
 ## Parse arguments
 for(i in 1:3){
-  eval(parse(text=args[[i]]))
+  eval(parse(text=arg[[i]]))
 }
 
 

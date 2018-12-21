@@ -14,8 +14,8 @@ library(SummarizedExperiment, quietly = TRUE, verbose = FALSE)
 
 arg <- commandArgs(trailingOnly = T)
 ## Parse arguments
-for(i in 1:length(args)){
-  eval(parse(text=args[[i]]))
+for(i in 1:length(arg)){
+  eval(parse(text=arg[[i]]))
 }
 
 ## Load methylation ####
