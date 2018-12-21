@@ -1,12 +1,12 @@
 ###############################################################################
 #' Run linear model between methylation and expression in HELIX
 #' @param data_fold Path with the methylation, expression and overlaps data
-#' @param chrom Chromosome used to compute the associations
+#' @param chr Chromosome used to compute the associations
 #' @param model Model used in the linear model (see Define linear models section)
 #' @param out_fold Path with the folder to output the results
 #' @param sim Number of simulation
 #' @example 
-#' Rscript runLinearModelSubset '--args data_fold="model1" chrom="1" out_fold="results/model1" model="cell"' 
+#' Rscript runLinearModelSubset '--args data_fold="model1" chr="1" out_fold="results/model1" model="cell"' 
 ###############################################################################
 library("parallel", verbose = FALSE)
 library("S4Vectors", verbose = FALSE)

@@ -41,5 +41,5 @@ resFolder="results/MethComBatExpResidualsNoCellAdj"
 for i in {1..22}
 do
   echo $i
-  R CMD BATCH '--args data_fold="'$resFolder'" chrom="chr'$i'" model="cell" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchr$i.out
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="cell" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchr$i.out
 done

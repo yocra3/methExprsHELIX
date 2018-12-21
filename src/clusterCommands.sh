@@ -15,3 +15,8 @@ sbatch src/runCellAdjCluster.sh
 
 ### Stratified
 sbatch src/runCellAdjStratCluster.sh
+
+# Run models
+
+## Run base models
+sbatch src/runAllModels.sh
