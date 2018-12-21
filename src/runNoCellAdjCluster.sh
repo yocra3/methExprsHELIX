@@ -15,6 +15,9 @@
 #set the number of CPUS per task
 #SBATCH --ntasks-per-node=1
 
+#set the memory
+#SBATCH --mem=20000
+
 # job output file information
 #SBATCH -o nocellPrepare.out
 
