@@ -6,16 +6,19 @@
 #' @param out_fold Path with the folder to output the results
 #' @param sim Number of simulation
 #' @example 
-#' Rscript runLinearModelSubset ./data/model1 1 cell results/model1
+#' Rscript runLinearModelSubset '--args data_fold="model1" chrom="1" out_fold="results/model1" model="cell"' 
 ###############################################################################
 library("parallel", verbose = FALSE)
 library("S4Vectors", verbose = FALSE)
 
 arg <- commandArgs(trailingOnly = T)
-data_fold <- arg[1]
+
+## Parse arguments
+for(i in 1:3){
+  eval(parse(text=arg[[i]]))
+}
 
 # Load data ####
-chr <- arg[2]
 a <- paste0(data_fold, "/", 'easub', chr, '.RData') # object: easub
 b <- paste0(data_fold, "/", 'masub', chr, '.RData') # object: masub
 c <- paste0(data_fold, "/", 'overlaps', chr, '.RData', sep = '') # object: overlaps
@@ -39,17 +42,13 @@ models <- c(cell = easub[tc,] ~ masub[cpg,] + pheno$cohort + pheno$e3_sex +
               pheno$CD4T_6 + pheno$CD8T_6 + pheno$Gran_6 + pheno$Mono_6, 
             nocellStrat = easub[tc,] ~ masub[cpg,] + pheno$cohort + 
               pheno$age_sample_years)
-model <- arg[3]
 stopifnot(model %in% names(models))
 model <- models[[model]]
-
-out_fold <- arg[4]
-
 
 # Sample Expression data ####
 ## Only in simulations
 if (length(arg) == 5){
-  sim <- arg[5]
+  sim <- arg[[5]]
   set.seed(sim)
   easub <- easub[, sample(colnames(easub))]
   
