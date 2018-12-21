@@ -14,7 +14,7 @@ library("S4Vectors", verbose = FALSE)
 arg <- commandArgs(trailingOnly = T)
 
 ## Parse arguments
-for(i in 1:3){
+for(i in 1:4){
   eval(parse(text=arg[[i]]))
 }
 
