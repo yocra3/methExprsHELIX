@@ -7,7 +7,7 @@
 #' @param Operation Operations to be applied to data (autosomes: select probes in 
 #' autosome chromosome; sex-stratify: divide the datasets in males and females)
 #' @example 
-#' Rscript createInputFiles.R ./data/gset_sm_res1.RData ./data/summ_exp_sm_res1.RData ./results/model1
+#' Rscript createInputFiles.R '--args methy="gset_sm_res1.RData" exprs="summ_exp_sm_res1.RData" out_fold="./results/model1" autosomes
 ###############################################################################
 
 ## Load libraries ####
@@ -16,17 +16,20 @@ library(SummarizedExperiment, quietly = TRUE, verbose = FALSE)
 
 arg <- commandArgs(trailingOnly = T)
 
+## Parse arguments
+for(i in 1:3){
+  eval(parse(text=args[[i]]))
+}
+
+
 ## Load methylation ####
-methy <- arg[1]
 load(methy) # gset
 
 ## Load Expression ####
-exprs <- arg[2]
 load(exprs) # se
 
 # Check data consistency ####
 stopifnot(all(colnames(gset) == colnames(se)))
-out_fold <- arg[3]
 
 print("Data loaded")
 
