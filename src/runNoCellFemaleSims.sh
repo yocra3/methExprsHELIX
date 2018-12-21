@@ -14,10 +14,10 @@
 ##SBATCH --mem=3000
 
 # job output file information
-#SBATCH -o nocellFemale.out
+#SBATCH -o nocellFemaleSims.out
 
 # job errors file
-#SBATCH -e nocellFemale.err
+#SBATCH -e nocellFemaleSims.err
 
 # set the partition where the job will run
 #SBATCH --partition=normal
@@ -40,12 +40,13 @@ module load R/3.5.1-foss-2018b
 ## No cell adjusted Female
 echo No Cell Adjusted Female
 model="nocellStrat"
-resFolder="results/MethComBatExpResidualsNoCellAdjStrat/female/sim${SLURM_ARRAY_TASK_ID}"
+resFolder="results/MethComBatExpResidualsNoCellAdjStrat/female"
+simFolder="$resFolder/sim${SLURM_ARRAY_TASK_ID}"
 mkdir resFolder
 
 for i in {1..22}
 do
   echo $i
-  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="'$model'" out_fold="'$resFolder'" ${SLURM_ARRAY_TASK_ID}' src/runLinearModelSubset.R $resFolder/modchr$i.out
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="'$model'" out_fold="'$resFolder'" ${SLURM_ARRAY_TASK_ID}' src/runLinearModelSubset.R $outFolder/modchr$i.out
 done
-R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="'$model'" out_fold="'$resFolder'" ${SLURM_ARRAY_TASK_ID}' src/runLinearModelSubset.R $resFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="'$model'" out_fold="'$resFolder'" ${SLURM_ARRAY_TASK_ID}' src/runLinearModelSubset.R $outFolder/modchrX.out
