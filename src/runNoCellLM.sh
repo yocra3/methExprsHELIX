@@ -26,7 +26,7 @@
 #SBATCH --nodes=1
  
 # set max wallclock time
-#SBATCH --time=4:00:00
+#SBATCH --time=7:00:00
  
 # mail alert at start, end and abortion of execution
 #SBATCH --mail-type=END
