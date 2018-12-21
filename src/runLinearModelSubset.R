@@ -33,6 +33,11 @@ models <- c(cell = easub[tc,] ~ masub[cpg,] + pheno$cohort + pheno$e3_sex +
               pheno$age_sample_years  + pheno$NK_6 + pheno$Bcell_6 +
               pheno$CD4T_6 + pheno$CD8T_6 + pheno$Gran_6 + pheno$Mono_6, 
             nocell = easub[tc,] ~ masub[cpg,] + pheno$cohort + pheno$e3_sex +
+              pheno$age_sample_years,
+            cellStrat = easub[tc,] ~ masub[cpg,] + pheno$cohort + 
+              pheno$age_sample_years  + pheno$NK_6 + pheno$Bcell_6 +
+              pheno$CD4T_6 + pheno$CD8T_6 + pheno$Gran_6 + pheno$Mono_6, 
+            nocellStrat = easub[tc,] ~ masub[cpg,] + pheno$cohort + 
               pheno$age_sample_years)
 model <- arg[3]
 stopifnot(model %in% names(models))
