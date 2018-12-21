@@ -44,7 +44,7 @@ module load R/3.5.1-foss-2018b
 ## Define paths to omic files
 meth="results/preprocessFiles/Methylation_GRSet.RData"
 gexp="results/preprocessFiles/Expression_SE_residuals.RData"
-resFolder="results/MethComBatExpResidualsCellAdj/Strat"
+resFolder="results/MethComBatExpResidualsCellAdjStrat"
 
 methMaleInput="${resFolder}/methyInputMale.Rdata"
 methFemaleInput="${resFolder}/methyInputFemale.Rdata"
