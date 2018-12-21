@@ -19,4 +19,9 @@ sbatch src/runCellAdjStratCluster.sh
 # Run models
 
 ## Run base models
-sbatch src/runAllModels.sh
+sbatch src/runNoCellLM.sh
+sbatch src/runNoCellFemaleLM.sh
+sbatch src/runNoCellMaleLM.sh
+sbatch src/runCellAdjLM.sh
+sbatch src/runCellAdjMaleLM.sh
+sbatch src/runCellAdjFemaleLM.sh
