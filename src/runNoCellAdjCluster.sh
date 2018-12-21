@@ -13,7 +13,7 @@
 #SBATCH --job-name=noCell
 
 #set the number of CPUS per task
-#SBATCH --ntasks-per-per-task = 1
+#SBATCH --ntasks-per-node=1
 
 # job output file information
 #SBATCH -o nocellPrepare.out
@@ -35,6 +35,8 @@
  
 # send mail to this address
 #SBATCH --mail-user= carlos.ruiz@isglobal.org
+
+module load R/3.5.1-foss-2018b
 
 ## Define paths to omic files
 meth="results/preprocessFiles/Methylation_GRSet.RData"
