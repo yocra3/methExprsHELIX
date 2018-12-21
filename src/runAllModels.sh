@@ -37,9 +37,59 @@
 module load R/3.5.1-foss-2018b
 
 ## Cell adjusted
-resFolder="results/MethComBatExpResidualsNoCellAdj"
+resFolder="results/MethComBatExpResidualsCellAdj"
 for i in {1..22}
 do
   echo $i
   R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="cell" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchr$i.out
 done
+
+
+## No cell adjusted
+resFolder="results/MethComBatExpResidualsNoCellAdj"
+for i in {1..22}
+do
+  echo $i
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="nocell" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchr$i.out
+done
+
+## Cell adjusted Male
+resFolder="results/MethComBatExpResidualsCellAdjStrat/male"
+model="cellStrat"
+for i in {1..22}
+do
+  echo $i
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="'$model'" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchr$i.out
+done
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="'$model'" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrY" model="'$model'" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchrY.out
+
+## Cell adjusted Female
+resFolder="results/MethComBatExpResidualsCellAdjStrat/female"
+for i in {1..22}
+do
+  echo $i
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="'$model'" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchr$i.out
+done
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="'$model'" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchrX.out
+
+## No cell adjusted Male
+resFolder="results/MethComBatExpResidualsNoCellAdjStrat/male"
+model="nocellStrat"
+for i in {1..22}
+do
+  echo $i
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="'$model'" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchr$i.out
+done
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="'$model'" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrY" model="'$model'" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchrY.out
+
+## Cell adjusted Female
+resFolder="results/MethComBatExpResidualsCellAdjStrat/female"
+for i in {1..22}
+do
+  echo $i
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="'$model'" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchr$i.out
+done
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="'$model'" out_fold="'$resFolder'"' src/runLinearModelSubset.R $resFolder/modchrX.out
+
