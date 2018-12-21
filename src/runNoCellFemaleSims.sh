@@ -42,7 +42,7 @@ echo No Cell Adjusted Female
 model="nocellStrat"
 resFolder="results/MethComBatExpResidualsNoCellAdjStrat/female"
 simFolder="$resFolder/sim${SLURM_ARRAY_TASK_ID}"
-mkdir resFolder
+mkdir $simFolder
 
 for i in {1..22}
 do
