@@ -51,7 +51,7 @@ mkdir $resFolder
   
 
 ## Generate Input data for analysis
-R CMD BATCH --vanilla src/createInputFiles.R '--args methy="$meth" exprs="$gexp" out_fold="$resFolder" autosomes' $resFolder/divide.out
+R CMD BATCH --vanilla src/createInputFiles.R '--args methy="$meth" exprs="$gexp" out_fold="$resFolder" autosomes' $resFolder/input.out
 
 ## Divide data for analysis
-R CMD BATCH --vanilla src/divide_data.R $methInput $gexpInput $resFolder
+R CMD BATCH --vanilla src/divide_data.R '--args methy="$methInput exprs="$gexpInput" out_fold="$resFolder"' $resFolder/divide.out

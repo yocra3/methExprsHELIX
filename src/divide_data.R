@@ -5,7 +5,7 @@
 #' @param exprs Path with the SummarizedExperiment
 #' @param out_fold Path with the folder to output the results
 #' @example 
-#' Rscript divide_datasets.R ./data/gset_sm_res1.RData ./data/summ_exp_sm_res1.RData ./results/model1
+#' Rscript divide_datasets.R '--args methy="gset_sm_res1.RData" exprs="summ_exp_sm_res1.RData" out_fold="model1"
 ###############################################################################
 
 ## Load libraries ####
@@ -13,19 +13,19 @@ library('minfi', quietly = TRUE, verbose = FALSE)
 library(SummarizedExperiment, quietly = TRUE, verbose = FALSE)
 
 arg <- commandArgs(trailingOnly = T)
+## Parse arguments
+for(i in 1:length(args)){
+  eval(parse(text=args[[i]]))
+}
 
 ## Load methylation ####
-methy <- arg[1]
 load(methy) # gset
 
 ## Load Expression ####
-exprs <- arg[2]
 load(exprs) # se
 
 # Check data consistency ####
 stopifnot(colnames(gset) == colnames(se))
-out_fold <- arg[3]
-
 print("Data loaded")
 
 ## Get data matrices
