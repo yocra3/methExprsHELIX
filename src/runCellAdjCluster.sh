@@ -4,13 +4,13 @@
 # Methylation vs Expression Analysis using:
 #   - Methylation: ComBat
 #   - Expression: SVA Residuals protecting age, sex, cohort and cell counts
-#   - Model: adjust for age, sex, cohort
+#   - Model: adjust for age, sex, cohort, and cell counts
 #   - All Samples
 #   - Autosome chromosomes
 ###############################################################################
 
 #set the job name
-#SBATCH --job-name=noCell
+#SBATCH --job-name=cellAdj
 
 #set the number of CPUS per task
 #SBATCH --ntasks-per-node=1
@@ -19,10 +19,10 @@
 #SBATCH --mem=15000
 
 # job output file information
-#SBATCH -o nocellPrepare.out
+#SBATCH -o cellAdjPrepare.out
 
 # job errors file
-#SBATCH -e nocellPrepare.err
+#SBATCH -e cellAdjPrepare.err
 
 # set the partition where the job will run
 #SBATCH --partition=normal
@@ -51,7 +51,6 @@ gexpInput="${resFolder}/gexpInput.Rdata"
 
 ## Create folder for result
 mkdir $resFolder
-  
 
 ## Generate Input data for analysis
 R CMD BATCH --vanilla '--args methy="'$meth'" exprs="'$gexp'" out_fold="'$resFolder'" autosomes' src/createInputFiles.R  $resFolder/input.out
