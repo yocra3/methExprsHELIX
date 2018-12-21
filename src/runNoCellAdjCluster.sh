@@ -13,7 +13,7 @@
 #SBATCH --job-name=noCell
 
 #set the number of CPUS per task
-#SBATCH --cpus-per-per-task = 1
+#SBATCH --ntasks-per-per-task = 1
 
 # job output file information
 #SBATCH -o nocellPrepare.out
@@ -49,7 +49,7 @@ mkdir $resFolder
   
 
 ## Generate Input data for analysis
-Rscript src/createInputFiles.R $meth $gexp $resFolder autosomes
+R CMD BATCH --vanilla src/createInputFiles.R $meth $gexp $resFolder autosomes
 
 ## Divide data for analysis
-Rscript src/divide_data.R $methInput $gexpInput $resFolder
+R CMD BATCH --vanilla src/divide_data.R $methInput $gexpInput $resFolder
