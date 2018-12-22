@@ -11,7 +11,7 @@
 #SBATCH --ntasks-per-node=16
 
 #set the memory
-#SBATCH --mem=3000
+#SBATCH --mem=35000
 
 # job output file information
 #SBATCH -o cellSims.out

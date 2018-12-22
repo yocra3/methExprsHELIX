@@ -29,7 +29,7 @@ sbatch src/runCellAdjFemaleLM.sh
 ## Simulations
 sbatch --array=1-100 src/runNoCellLMSims.sh
 sbatch --array=1-100 src/runNoCellMaleLMSims.sh
-sbatch --array=1-100 src/runNoCellFemaleLMSims.sh
+sbatch --array=1-100 src/runNoCellFemaleSims.sh
 sbatch --array=1-100 src/runCellLMSims.sh
 sbatch --array=1-100 src/runCellMaleLMSims.sh
-sbatch --array=1-100 src/runCellFemaleLMSims.sh
+sbatch --array=1-100 src/runCellFemaleSims.sh
