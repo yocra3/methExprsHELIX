@@ -48,7 +48,7 @@ model <- models[[model]]
 # Sample Expression data ####
 ## Only in simulations
 if (length(arg) == 5){
-  sim <- arg[[5]]
+  sim <- as.numeric(arg[[5]])
   set.seed(sim)
   easub <- easub[, sample(colnames(easub))]
   

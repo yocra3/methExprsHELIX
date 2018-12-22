@@ -5,7 +5,7 @@
 ###############################################################################
 
 #set the job name
-#SBATCH -J=nocellFemaleSims
+#SBATCH -J=cellFemaleSims
 
 #set the number of CPUS per task
 #SBATCH --ntasks-per-node=16
@@ -14,10 +14,10 @@
 #SBATCH --mem=3000
 
 # job output file information
-#SBATCH -o nocellFemaleSims.out
+#SBATCH -o cellFemaleSims.out
 
 # job errors file
-#SBATCH -e nocellFemaleSims.err
+#SBATCH -e cellFemaleSims.err
 
 # set the partition where the job will run
 #SBATCH --partition=normal
@@ -38,9 +38,9 @@ module load R/3.5.1-foss-2018b
 
 
 ## No cell adjusted Female
-echo No Cell Adjusted Female
-model="nocellStrat"
-resFolder="results/MethComBatExpResidualsNoCellAdjStrat/female"
+echo Cell Adjusted Female
+model="cellStrat"
+resFolder="results/MethComBatExpResidualsCellAdjStrat/female"
 simFolder="$resFolder/sim${SLURM_ARRAY_TASK_ID}"
 mkdir $simFolder
 

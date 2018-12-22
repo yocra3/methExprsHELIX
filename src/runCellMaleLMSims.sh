@@ -5,7 +5,7 @@
 ###############################################################################
 
 #set the job name
-#SBATCH -J=nocellFemaleSims
+#SBATCH --job-name=CellMaleSims
 
 #set the number of CPUS per task
 #SBATCH --ntasks-per-node=16
@@ -14,10 +14,10 @@
 #SBATCH --mem=3000
 
 # job output file information
-#SBATCH -o nocellFemaleSims.out
+#SBATCH -o CellMaleSims.out
 
 # job errors file
-#SBATCH -e nocellFemaleSims.err
+#SBATCH -e CellMaleSims.err
 
 # set the partition where the job will run
 #SBATCH --partition=normal
@@ -37,17 +37,20 @@
 module load R/3.5.1-foss-2018b
 
 
-## No cell adjusted Female
-echo No Cell Adjusted Female
-model="nocellStrat"
-resFolder="results/MethComBatExpResidualsNoCellAdjStrat/female"
+## cell adjusted Male
+echo Cell Adjusted Male
+resFolder="results/MethComBatExpResidualsCellAdjStrat/male"
+model="cellStrat"
+
 simFolder="$resFolder/sim${SLURM_ARRAY_TASK_ID}"
 mkdir $simFolder
+
 
 for i in {1..22}
 do
   echo $i
-  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="'$model'" out_fold="'$resFolder'" ${SLURM_ARRAY_TASK_ID}' src/runLinearModelSubset.R $simFolder/modchr$i.out
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="'$model'" out_fold="'$resFolder'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
 done
-R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="'$model'" out_fold="'$resFolder'" ${SLURM_ARRAY_TASK_ID}' src/runLinearModelSubset.R $simFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="'$model'" out_fold="'$resFolder'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrY" model="'$model'" out_fold="'$resFolder'"' src/runLinearModelSubset.R $simFolder/modchrY.out
 mv $simFolder /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$resFolder
