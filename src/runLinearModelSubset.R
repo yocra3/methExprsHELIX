@@ -13,6 +13,8 @@ library("S4Vectors", verbose = FALSE)
 
 arg <- commandArgs(trailingOnly = T)
 
+print(arg)
+
 ## Parse arguments
 for(i in 1:4){
   eval(parse(text=arg[[i]]))
@@ -55,6 +57,8 @@ if (length(arg) == 5){
   ### Add sim name to out_fold
   out_fold <- paste0(out_fold, "/sim", sim)
 }
+
+print(out_fold)
 
 resCorr <- function(x) {
   cpg <- overlaps[x, 1]
