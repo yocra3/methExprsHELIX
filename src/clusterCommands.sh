@@ -33,3 +33,6 @@ sbatch --array=1-100 src/runNoCellFemaleSims.sh
 sbatch --array=1-100 src/runCellLMSims.sh
 sbatch --array=1-100 src/runCellMaleLMSims.sh
 sbatch --array=1-100 src/runCellFemaleSims.sh
+
+## Failed simulations
+sbatch src/runFailedSimulations.sh

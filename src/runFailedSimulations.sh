@@ -42,7 +42,7 @@ resFolder="results/MethComBatExpResidualsCellAdj"
 
 ### sim79
 simFolder="$resFolder/sim79"
-mkdir simFolder
+mkdir $simFolder
 
 for i in {19..22}
 do
@@ -52,7 +52,7 @@ done
 
 ### sim87
 simFolder="$resFolder/sim87"
-mkdir simFolder
+mkdir $simFolder
 
 for i in {1..2}
 do
