@@ -36,3 +36,7 @@ sbatch --array=1-100 src/runCellFemaleSims.sh
 
 ## Failed simulations
 sbatch src/runFailedSimulations.sh
+sbatch src/runFailedSimulations2.sh
+
+## Send files
+rsync -azvh --progress -e 'ssh -o "ProxyCommand ssh -A cruizh@sit-web.upf.edu -W %h:%p"' cruizh@marvin.s.upf.edu:~/methExprsHELIX/results/ .
