@@ -45,7 +45,7 @@ getBetaDistributionsGenes <- function(folder, chr = 1:22){
         pvals <- df$V5
       })
       
-      perms <- Reduce(cbind, resCpG)
+      perms <- Reduce(cbind, resGene)
       pmin <- apply(perms, 2, min, na.rm=TRUE)
       
       llhd2 <- function(x,p) {
