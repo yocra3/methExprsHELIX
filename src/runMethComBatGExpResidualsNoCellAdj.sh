@@ -32,3 +32,9 @@ do
   echo $i
   Rscript src/runLinearModelSubset.R $resFolder chr$i nocell $resFolder
 done
+
+## Generate beta dsitributions per CpG
+Rscript src/getBetaDistributionsCpGs.R folder="'$resFolder'" type="'autosome'"
+
+## Generate beta dsitributions per gene
+Rscript src/getBetaDistributionsGenes.R folder="'$resFolder'" type="'autosome'"
