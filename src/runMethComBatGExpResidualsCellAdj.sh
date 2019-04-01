@@ -36,6 +36,7 @@ done
 
 ## Generate beta dsitributions per CpG
 Rscript src/getBetaDistributionsCpGs.R folder="'$resFolder'" type="'autosome'"
+Rscript src/getSignificantPairs.R folder="'$resFolder'" base="'cpgs'" distribution="'$resFolder/CpGsDistr.Rdata'" base="cpgs"
 
 ## Generate beta dsitributions per gene
 Rscript src/getBetaDistributionsGenes.R folder="'$resFolder'" type="'autosome'"
