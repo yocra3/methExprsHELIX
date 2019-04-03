@@ -43,7 +43,7 @@ feats <- intersect(feats, names(distr))
 
 featPvals <- function(feat, df, distr, base){
   
-d <- distr[[feat]]
+  d <- distr[[feat]]
   col <- ifelse(base == "cpgs", "CpG", "TC")
   df <- df[df[, col, drop = TRUE] == feat, , drop = FALSE]
   

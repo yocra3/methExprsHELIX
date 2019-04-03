@@ -1,0 +1,126 @@
+---
+title: "HELIX meth-expr Cell adjusted results"
+author: 
+- Carlos Ruiz 
+
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+knitr::opts_knit$set(root.dir = "../")
+
+```
+
+# Introduction
+
+In this report, we discuss the results of the association of methylation vs gene expression in the subcohort data of HELIX project. The results of this report were obtained by running a model adjusted for cell counts and only including autosome chromosomes.
+
+```{r}
+library(ggplot2)
+load("results/MethComBatExpResidualsCellAdj/allres_simP_cpgs.Rdata")
+load("data/cpganno.RData")
+
+## Define useful variables
+sigdf <- df[df$sigPair, ]
+allCpGs <- unique(df$CpG)
+sigCpGs <- unique(sigdf$CpG)
+sigTCs <- unique(sigdf$TCs)
+```
+
+
+# General overview
+
+We evaluated the association between `r length(unique(df$CpG))` CpGs and `r length(unique(df$TC))` TCs. Of those, `r length(sigCpGs)` CpGs were significantly associated with at least one gene (`r round(length(sigCpGs)/length(unique(df$CpG))*100, 1)`%) and `r length(sigTCs)` were significantly associated with at least one CpG (`r round(length(sigTCs)/length(unique(df$TC))*100, 1)`).
+
+In total, we tested `r nrow(df)` CpG-TC pairs. In `r nrow(sigdf)` of those pairs, changes in methylation were associated with changes in gene expression (`r round(nrow(sigdf)/nrow(df)*100), 1)`%). 
+
+In general, each CpGs was associated with few TCs while each TCs was associated with several genes: 
+
+```{r}
+a <- data.frame(table(sigdf$CpG))
+a$Feature <- "CpG"
+
+b <- data.frame(table(sigdf$TC))
+b$Feature <- "TC"
+
+t <- rbind(a, b)
+ggplot(t, aes(x = Freq)) + geom_histogram(binwidth = 1) + 
+  ylab("Number of Features") + theme_bw() + facet_grid(~Feature) + 
+  scale_x_continuous(limits = c(0, 30), name = "Feaures associated")
+```
+
+Specifically, `r sum(a$Freq == 1)` were only associated with one gene (`r round(mean(a$Freq == 1)*100, 2)`%). 
+
+
+# CpGs Enrichment
+
+In the following sections, we tested if the CpGs associated with gene expression had different features.
+
+## Genic/Intergenic
+
+We first tested whether CpGs associated with gene expression were located in genic or intergenic regions.
+
+### Associated vs not-associated
+
+```{r}
+rownames(cpganno) <- cpganno$Name
+allanno <- cpganno[allCpGs, ]
+allanno$assoc <- allanno$Name %in% sigCpGs
+
+allanno$GeneRel <- ifelse(allanno$UCSC_RefGene_Name == "", "Intergenic", "Genic")
+
+t <- table(factor(allanno$assoc, levels = c("TRUE", "FALSE")), allanno$GeneRel)
+t
+chisq.test(t)
+
+## OR
+or <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
+or
+```
+
+CpGs associated with gene expression tend to be more present in genic regions.
+
+Next, we checked this effect separately in CpGs that changed the expression of 1 TC (mono) and for those that changed the expression of more than 1 TC (multi). 
+
+### Mono vs non-associated
+
+```{r}
+CpGs1 <- a[a$Freq == 1, "Var1"]
+CpGs1m <- a[a$Freq != 1, "Var1"]
+
+anno1 <- allanno[!allanno$Name %in% CpGs1m, ]
+anno1$assoc <- anno1$Name %in% sigCpGs
+
+t <- table(factor(anno1$assoc, levels = c("TRUE", "FALSE")), anno1$GeneRel)
+t
+chisq.test(t)
+
+## OR
+or <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
+or
+```
+
+When we only consider mono CpGs, they are more focused on genic regions.
+
+
+### Multi vs non-associated
+
+```{r}
+anno1m <- allanno[!allanno$Name %in% CpGs1, ]
+anno1m$assoc <- anno1m$Name %in% sigCpGs
+
+t <- table(factor(anno1m$assoc, levels = c("TRUE", "FALSE")), anno1m$GeneRel)
+t
+chisq.test(t)
+
+## OR
+or <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
+or
+
+```
+
+When we only consider multi CpGs, they are mainly placed in intergenic regions.
