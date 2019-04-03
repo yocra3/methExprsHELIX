@@ -7,6 +7,10 @@
 #' Rscript getSignificantPairs.R '--args resFolder="results/MethComBatExpResidualsCellAdj" distribution="results/MethComBatExpResidualsCellAdj/CpGsDistr.Rdata" base="cpgs"
 ###############################################################################
 
+library(pbapply)
+pboptions(type="timer")
+
+
 arg <- commandArgs(trailingOnly = T)
 ## Parse arguments
 for(i in 1:length(arg)){
@@ -38,22 +42,25 @@ if (base == "cpgs"){
 feats <- intersect(feats, names(distr))
 
 featPvals <- function(feat, df, distr, base){
-  d <- distr[[feat]]
+  
+d <- distr[[feat]]
   col <- ifelse(base == "cpgs", "CpG", "TC")
   df <- df[df[, col, drop = TRUE] == feat, , drop = FALSE]
   
   pbeta(min(df$p.value), d[1], d[2], lower.tail = TRUE)
 }
 
-featsPvals <- vapply(feats, featPvals, df = df, distr = distr, base = base, 
-                     FUN.VALUE = numeric(1))
+featsPvals <- pbsapply(feats, featPvals, df = df, distr = distr, base = base, 
+                     cl = 15)
 featStatsDF <- data.frame(feat = feats, p.val = featsPvals, p.val.adj = p.adjust(featsPvals),
                           stringsAsFactors = FALSE)
 sigFeats <- subset(featStatsDF, p.val.adj < 0.05)$feat
-thresP <- max(sigDF[sigFeats, "p.val"])
+thresP <- max(featStatsDF[sigFeats, "p.val"])
 
 isSig <- function(row, df, sigFeats, distr, thres, base){
-  col <- ifelse(base == "cpgs", "CpG", "TC")
+  
+
+col <- ifelse(base == "cpgs", "CpG", "TC")
   feat <- df[row, col]
   d <- distr[[feat]]
   
@@ -64,7 +71,7 @@ isSig <- function(row, df, sigFeats, distr, thres, base){
   pbeta(pval, d[1], d[2], lower.tail = TRUE) <= thres
 }
 
-df$sigPair <- vapply(seq_len(nrow(df)), isSig, df = df, distr = distr, base = base, 
-                sigFeats = sigFeats, thres = thresP, FUN.VALUE = logical(1))
+df$sigPair <- pbsapply(seq_len(nrow(df)), isSig, df = df, distr = distr, base = base, 
+                sigFeats = sigFeats, thres = thresP, cl = 15)
 
-save(df, sigFeats, file = paste0(resFolder, "/allres_simP_", base, ".Rdata"))
+save(df, featStatsDF, sigFeats, file = paste0(resFolder, "/allres_simP_", base, ".Rdata"))

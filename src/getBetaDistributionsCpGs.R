@@ -58,7 +58,7 @@ getBetaDistributionsCpGs <- function(folder, chr = 1:22){
       param <- nlm(llhd2, x=pmin, p=pIni)$estimate
       
       param
-    }, mc.cores = 10)
+    }, mc.cores = 5)
     names(distrs) <- CpGs
     distrs
     
