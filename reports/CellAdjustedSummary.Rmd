@@ -21,6 +21,7 @@ In this report, we discuss the results of the association of methylation vs gene
 
 ```{r}
 library(ggplot2)
+library(dplyr)
 load("results/MethComBatExpResidualsCellAdj/allres_simP_cpgs.Rdata")
 load("data/cpganno.RData")
 
@@ -46,14 +47,31 @@ a$Feature <- "CpG"
 
 b <- data.frame(table(sigdf$TC))
 b$Feature <- "TC"
-
 t <- rbind(a, b)
 ggplot(t, aes(x = Freq)) + geom_histogram(binwidth = 1) + 
   ylab("Number of Features") + theme_bw() + facet_grid(~Feature) + 
   scale_x_continuous(limits = c(0, 30), name = "Feaures associated")
+
+
+CpGs1 <- a[a$Freq == 1, "Var1"]
+CpGs1m <- a[a$Freq != 1, "Var1"]
+
+sigdf1 <- as_tibble(filter(sigdf, CpG %in% CpGs1))
+sigdf1m <- as_tibble(filter(sigdf, CpG %in% CpGs1m))
+
+sigdf1m_signSum <- sigdf1m %>% 
+  group_by(CpG) %>% 
+  summarize(propPos = mean(FC > 0), propNeg = mean(FC < 0))
+
 ```
 
-Specifically, `r sum(a$Freq == 1)` were only associated with one gene (`r round(mean(a$Freq == 1)*100, 2)`%). 
+`r sum(a$Freq == 1)` were only associated with one gene (`r round(mean(a$Freq == 1)*100, 2)`%), and we called them mono CpGs. On the other hand, we defined CpGs associated with more than 1 TC as pleiotropic CpGs. 
+
+In mono CpGs, `r sum(sigdf1$FC > 0)` CpGs were positively associated with gene expression (`r round(mean(sigdf1$FC > 0)*100, 2)`%) and `r sum(sigdf1$FC < 0)` CpGs were negatively associated with gene expression (`r round(mean(sigdf1$FC < 0)*100, 2)`%). In multi CpGs, for `r sum(sigdf1m_signSum$propPos == 1)` CpGs the association was positive for all CpGs (`r round(mean(sigdf1m_signSum$propPos == 1)*100, 2)`%), for `r sum(sigdf1m_signSum$propNeg == 1)` CpGs the association was negative for all CpGs (`r round(mean(sigdf1m_signSum$propNeg == 1)*100, 2)`%) and `r sum(sigdf1m_signSum$propPos != 1 & sigdf1m_signSum$propNeg != 1)` CpGs were positively associated with some TCs and negatively associated with others (`r round(mean(sigdf1m_signSum$propPos != 1 & sigdf1m_signSum$propNeg != 1)*100, 2)`%). 
+
+# CpG-TC distance
+
+
 
 
 # CpGs Enrichment
@@ -84,14 +102,10 @@ or
 
 CpGs associated with gene expression tend to be more present in genic regions.
 
-Next, we checked this effect separately in CpGs that changed the expression of 1 TC (mono) and for those that changed the expression of more than 1 TC (multi). 
 
 ### Mono vs non-associated
 
 ```{r}
-CpGs1 <- a[a$Freq == 1, "Var1"]
-CpGs1m <- a[a$Freq != 1, "Var1"]
-
 anno1 <- allanno[!allanno$Name %in% CpGs1m, ]
 anno1$assoc <- anno1$Name %in% sigCpGs
 

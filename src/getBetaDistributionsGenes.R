@@ -14,6 +14,9 @@ for(i in 1:length(arg)){
   eval(parse(text=arg[[i]]))
 }
 
+load("results/preprocessFiles/allOverlaps.Rdata")
+overAll$pair <- paste0(overAll$CpG, overAll$TC)
+
 
 if (type == "autosome"){
   chr <- 1:22
@@ -32,8 +35,10 @@ getBetaDistributionsGenes <- function(folder, chr = 1:22){
     
     print(chrom)
     resList <- lapply(simfolders, function(simFold) {
-      read.table(gzfile(paste0(simFold, "/outputchr", chrom, ".txt.gz")),
+      df <- read.table(gzfile(paste0(simFold, "/outputchr", chrom, ".txt.gz")),
                  as.is = TRUE)
+      ### Remove bad overlaps (solve bug)
+      df[paste0(df$V1, df$V2) %in% overAll$pair, ]
     })
     genes <- unique(resList[[1]]$V2)
     
