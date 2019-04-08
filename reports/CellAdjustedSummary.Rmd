@@ -23,12 +23,11 @@ In this report, we discuss the results of the association of methylation vs gene
 library(ggplot2)
 library(dplyr)
 library(cowplot)
+
 load("results/MethComBatExpResidualsCellAdj/allres_simP_cpgs.Rdata")
 load("results/preprocessFiles/allOverlaps.Rdata")
 load("results/preprocessFiles/methyAnnotation.Rdata")
 load("results/preprocessFiles/gexpAnnotation.Rdata")
-
-
 
 ## Define useful variables
 sigdf <- df[df$sigPair, ]
@@ -57,6 +56,14 @@ ggplot(t, aes(x = Freq)) + geom_histogram(binwidth = 1) +
   ylab("Number of Features") + theme_bw() + facet_grid(~Feature) + 
   scale_x_continuous(limits = c(0, 30), name = "Feaures associated")
 
+CpGsSum <- df %>%
+  group_by(CpG) %>%
+  summarise(Type = ifelse(sum(sigPair) == 0, "Non-significant",
+                          ifelse(sum(sigPair) == 1, "Mono", "Multi")),
+            Direction = ifelse(sum(sigPair) == 0, "Non-significant",
+                               ifelse(all(FC[sigPair] > 0), "Positive", 
+                                      ifelse(all(FC[sigPair] < 0), "Negative", "Both"))))
+
 
 CpGs1 <- a[a$Freq == 1, "Var1"]
 CpGs1m <- a[a$Freq != 1, "Var1"]
@@ -80,6 +87,8 @@ In mono CpGs, `r sum(sigdf1$FC > 0)` CpGs were positively associated with gene e
 
 # CpG-TC distance
 
+### Associated vs not-associated
+
 We evaluated whether CpGs associated with gene expression were closer to the TCs. 
 
 ```{r}
@@ -90,6 +99,8 @@ ggplot(df_comp, aes(x = Distance, fill = sigPair)) + geom_density(alpha=0.4) +
 ```
 
 CpGs tend to be associated with expression of close TCs. We do not observe differences when CpGs are upstream or downstream. 
+
+### Positive vs negative
 
 ```{r}
 pA <- df_comp %>% 
@@ -118,6 +129,8 @@ df_comp %>%
 
 CpGs associated negatively to TCs are on average 14Kb closer to the TSS than CpGs associated positively. 
 
+### Mono vs Multi
+
 ```{r}
 pA <- df_comp %>% 
   filter(sigPair == TRUE) %>%
@@ -142,9 +155,9 @@ df_comp %>%
   lm(formula = abs(Distance) ~ class) %>% summary
 ```
 
-
 CpGs associated to only one TC are on average 26Kb closer to the TSS than CpGs associated to several TCs. 
 
+### Both factors
 
 ```{r}
 df_comp %>% 
@@ -178,56 +191,86 @@ We first tested whether CpGs associated with gene expression were located in gen
 ### Associated vs not-associated
 
 ```{r}
-rownames(cpganno) <- cpganno$Name
-allanno <- cpganno[allCpGs, ]
-allanno$assoc <- allanno$Name %in% sigCpGs
+rownames(methyAnnot) <- methyAnnot$Name
+methyAnnot <- methyAnnot[allCpGs, ]
+methyAnnot$assoc <- methyAnnot$Name %in% sigCpGs
 
-allanno$GeneRel <- ifelse(allanno$UCSC_RefGene_Name == "", "Intergenic", "Genic")
+methyAnnot$GeneRel <- ifelse(methyAnnot$UCSC_RefGene_Name == "", "Intergenic", "Genic")
 
-t <- table(factor(allanno$assoc, levels = c("TRUE", "FALSE")), allanno$GeneRel)
+t <- table(factor(methyAnnot$assoc, levels = c("TRUE", "FALSE")), methyAnnot$GeneRel)
 t
 chisq.test(t)
 
 ## OR
 or <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
-or
 ```
 
-CpGs associated with gene expression tend to be more present in genic regions.
+CpGs associated with gene expression have an OR of `r or` of being more present in genic regions.
+
+### Positive vs negative
+```{r}
+tmp <- as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  left_join(CpGsSum, by = "CpG") %>%
+  filter(!Direction %in% c("Non-significant", "Both")) 
+t <- table(tmp$Direction, tmp$GeneRel)
+t
+chisq.test(t)
+
+## OR
+or <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
+```
+
+CpGs negatively associated with gene expression have an OR of `r or` of being more present in genic regions than CpGs associated negatively.
+
+### Positive vs both
+```{r}
+tmp <- as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  left_join(CpGsSum, by = "CpG") %>%
+  filter(!Direction %in% c("Non-significant", "Negative")) 
+t <- table(tmp$Direction, tmp$GeneRel)
+t
+chisq.test(t)
+
+## OR
+or <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
+```
 
 
-### Mono vs non-associated
+CpGs positively associated with gene expression have a similar probality of being more present in genic regions than CpGs associated positively and negatively (OR: `r or`).
+
+### Negative vs both
+```{r}
+tmp <- as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  left_join(CpGsSum, by = "CpG") %>%
+  filter(!Direction %in% c("Non-significant", "Positive")) 
+t <- table(factor(tmp$Direction, levels = c("Negative", "Both")), tmp$GeneRel)
+t
+chisq.test(t)
+
+## OR
+or <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
+```
+
+CpGs negatively associated with gene expression are more likely to be present in genic regions than CpGs associated positively and negatively (OR: `r or`).
+
+### Mono vs multi
 
 ```{r}
-anno1 <- allanno[!allanno$Name %in% CpGs1m, ]
-anno1$assoc <- anno1$Name %in% sigCpGs
-
-t <- table(factor(anno1$assoc, levels = c("TRUE", "FALSE")), anno1$GeneRel)
+tmp <- as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  left_join(CpGsSum, by = "CpG")
+t <- table(tmp$Type, tmp$GeneRel)
 t
 chisq.test(t)
 
 ## OR
-or <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
-or
+orMoMu <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
+orMoAll <- round(t[1, 1]*t[3, 2]/(t[1, 2]*t[3, 1]), 2)
+orMuAll <- round(t[2, 1]*t[3, 2]/(t[2, 2]*t[3, 1]), 2)
 ```
 
-When we only consider mono CpGs, they are more focused on genic regions.
+CpGs that change expression of one gene, are more likely to be in the genic region than CpGs affecting expression of several genes (OR: `r orMoMu`) or than CpGs not-affecting gene expression (OR: `r orMoAll`). CpGs affecting the expression of multiple TCs are less likely to be in genic regions (OR: `r orMuAll`).
 
-
-### Multi vs non-associated
-
-```{r}
-anno1m <- allanno[!allanno$Name %in% CpGs1, ]
-anno1m$assoc <- anno1m$Name %in% sigCpGs
-
-t <- table(factor(anno1m$assoc, levels = c("TRUE", "FALSE")), anno1m$GeneRel)
-t
-chisq.test(t)
-
-## OR
-or <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
-or
-
-```
-
-When we only consider multi CpGs, they are mainly placed in intergenic regions.
