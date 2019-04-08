@@ -22,8 +22,13 @@ In this report, we discuss the results of the association of methylation vs gene
 ```{r}
 library(ggplot2)
 library(dplyr)
+library(cowplot)
 load("results/MethComBatExpResidualsCellAdj/allres_simP_cpgs.Rdata")
-load("data/cpganno.RData")
+load("results/preprocessFiles/allOverlaps.Rdata")
+load("results/preprocessFiles/methyAnnotation.Rdata")
+load("results/preprocessFiles/gexpAnnotation.Rdata")
+
+
 
 ## Define useful variables
 sigdf <- df[df$sigPair, ]
@@ -37,7 +42,7 @@ sigTCs <- unique(sigdf$TC)
 
 We evaluated the association between `r length(unique(df$CpG))` CpGs and `r length(unique(df$TC))` TCs. Of those, `r length(sigCpGs)` CpGs were significantly associated with at least one gene (`r round(length(sigCpGs)/length(unique(df$CpG))*100, 2)`%) and `r length(sigTCs)` were significantly associated with at least one CpG (`r round(length(sigTCs)/length(unique(df$TC))*100, 2)`).
 
-In total, we tested `r nrow(df)` CpG-TC pairs. In `r nrow(sigdf)` of those pairs, changes in methylation were associated with changes in gene expression (`r round(nrow(sigdf)/nrow(df)*100, 2)`%). 
+In total, we tested `r nrow(df)` CpG-TC pairs. In `r nrow(sigdf)` of those pairs, changes in methylation were associated with changes in gene expression (`r round(nrow(sigdf)/nrow(df)*100, 2)`%). Of all these associations, `r sum(sigdf$FC < 0)` were negative (`r round(mean(sigdf$FC < 0) * 100, 2)`%)
 
 In general, each CpGs was associated with few TCs while each TCs was associated with several genes: 
 
@@ -63,6 +68,10 @@ sigdf1m_signSum <- sigdf1m %>%
   group_by(CpG) %>% 
   summarize(propPos = mean(FC > 0), propNeg = mean(FC < 0))
 
+allPos <- sigdf1m_signSum[sigdf1m_signSum$propPos == 1, "CpG", drop = TRUE]
+allNeg <- sigdf1m_signSum[sigdf1m_signSum$propNeg == 1, "CpG", drop = TRUE]
+posNeg <- sigdf1m_signSum$CpG[!sigdf1m_signSum$CpG %in% c(allPos, allNeg)]
+
 ```
 
 `r sum(a$Freq == 1)` were only associated with one gene (`r round(mean(a$Freq == 1)*100, 2)`%), and we called them mono CpGs. On the other hand, we defined CpGs associated with more than 1 TC as pleiotropic CpGs. 
@@ -71,8 +80,92 @@ In mono CpGs, `r sum(sigdf1$FC > 0)` CpGs were positively associated with gene e
 
 # CpG-TC distance
 
+We evaluated whether CpGs associated with gene expression were closer to the TCs. 
+
+```{r}
+df_comp <- inner_join(df, overDF, by = c("CpG", "TC"))
+ggplot(df_comp, aes(x = Distance, fill = sigPair)) + geom_density(alpha=0.4) + 
+  theme_bw() + 
+  scale_fill_discrete(name = "", labels = c("Non-significant", "Significant"))
+```
+
+CpGs tend to be associated with expression of close TCs. We do not observe differences when CpGs are upstream or downstream. 
+
+```{r}
+pA <- df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
+  ggplot(aes(x = Distance, fill = class)) + geom_density(alpha=0.4) + 
+  theme_bw() + 
+  scale_fill_discrete(name = "")
+
+pB <- df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
+  ggplot(aes(x = abs(Distance) + 1, fill = class)) + geom_density(alpha=0.4) + 
+  theme_bw() + 
+  scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 10000), labels = c("10b", "1Kb", "100Kb")) + 
+  scale_fill_discrete(name = "")
+
+plot_grid(pA, pB, ncol = 2)
+
+df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
+  lm(formula = abs(Distance) ~ class) %>% summary
+
+```
+
+CpGs associated negatively to TCs are on average 14Kb closer to the TSS than CpGs associated positively. 
+
+```{r}
+pA <- df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(class = ifelse(CpG %in% CpGs1, "Mono", "Multi")) %>%
+  ggplot(aes(x = Distance, fill = class)) + geom_density(alpha=0.4) + 
+  theme_bw() + 
+  scale_fill_discrete(name = "")
+
+pB <- df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(class = ifelse(CpG %in% CpGs1, "Mono", "Multi")) %>%
+  ggplot(aes(x = abs(Distance) + 1, fill = class)) + geom_density(alpha=0.4) + 
+  theme_bw() + 
+  scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 10000), labels = c("10b", "1Kb", "100Kb")) + 
+  scale_fill_discrete(name = "")
+
+plot_grid(pA, pB, ncol = 2)
+
+df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(class = ifelse(CpG %in% CpGs1, "Mono", "Multi")) %>%
+  lm(formula = abs(Distance) ~ class) %>% summary
+```
 
 
+CpGs associated to only one TC are on average 26Kb closer to the TSS than CpGs associated to several TCs. 
+
+
+```{r}
+df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(CpGclass = ifelse(CpG %in% CpGs1, "Mono", "Multi"), 
+         AssocClass = ifelse(CpG %in% posNeg, "Both",
+                             ifelse(FC > 0, "Positive", "Negative"))) %>%
+  ggplot(aes(x = abs(Distance) + 1, fill = AssocClass)) + geom_density(alpha=0.4) + 
+  theme_bw() + facet_wrap(~CpGclass) + 
+  scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 10000), labels = c("10b", "1Kb", "100Kb")) + 
+  scale_fill_discrete(name = "")
+
+df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(CpGclass = ifelse(CpG %in% CpGs1, "Mono", "Multi"), 
+         AssocClass = ifelse(CpG %in% posNeg, "Both",
+                             ifelse(FC > 0, "Positive", "Negative"))) %>%
+  lm(formula = abs(Distance) ~ CpGclass + AssocClass) %>% anova
+```
+
+When evaluting both factors at the same time, we get the same conclussions: CpGs inversely associated with gene expression that only change expression of one gene are closer to the TC than CpGs changing positively gene expression in more than one gene. 
 
 # CpGs Enrichment
 
