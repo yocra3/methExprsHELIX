@@ -23,6 +23,7 @@ In this report, we discuss the results of the association of methylation vs gene
 library(ggplot2)
 library(dplyr)
 library(cowplot)
+library(tidyr)
 
 load("results/MethComBatExpResidualsCellAdj/allres_simP_cpgs.Rdata")
 load("results/preprocessFiles/allOverlaps.Rdata")
@@ -118,7 +119,7 @@ pB <- df_comp %>%
   scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 10000), labels = c("10b", "1Kb", "100Kb")) + 
   scale_fill_discrete(name = "")
 
-plot_grid(pA, pB, ncol = 2)
+plot_grid(pA, pB, nrow = 2)
 
 df_comp %>% 
   filter(sigPair == TRUE) %>%
@@ -147,7 +148,7 @@ pB <- df_comp %>%
   scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 10000), labels = c("10b", "1Kb", "100Kb")) + 
   scale_fill_discrete(name = "")
 
-plot_grid(pA, pB, ncol = 2)
+plot_grid(pA, pB, nrow = 2)
 
 df_comp %>% 
   filter(sigPair == TRUE) %>%
@@ -194,8 +195,10 @@ We first tested whether CpGs associated with gene expression were located in gen
 rownames(methyAnnot) <- methyAnnot$Name
 methyAnnot <- methyAnnot[allCpGs, ]
 methyAnnot$assoc <- methyAnnot$Name %in% sigCpGs
-
 methyAnnot$GeneRel <- ifelse(methyAnnot$UCSC_RefGene_Name == "", "Intergenic", "Genic")
+methyAnnot <- as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  left_join(CpGsSum, by = "CpG")
 
 t <- table(factor(methyAnnot$assoc, levels = c("TRUE", "FALSE")), methyAnnot$GeneRel)
 t
@@ -209,9 +212,7 @@ CpGs associated with gene expression have an OR of `r or` of being more present 
 
 ### Positive vs negative
 ```{r}
-tmp <- as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  left_join(CpGsSum, by = "CpG") %>%
+tmp <- methyAnnot %>%
   filter(!Direction %in% c("Non-significant", "Both")) 
 t <- table(tmp$Direction, tmp$GeneRel)
 t
@@ -225,9 +226,7 @@ CpGs negatively associated with gene expression have an OR of `r or` of being mo
 
 ### Positive vs both
 ```{r}
-tmp <- as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  left_join(CpGsSum, by = "CpG") %>%
+tmp <- methyAnnot %>%
   filter(!Direction %in% c("Non-significant", "Negative")) 
 t <- table(tmp$Direction, tmp$GeneRel)
 t
@@ -242,9 +241,7 @@ CpGs positively associated with gene expression have a similar probality of bein
 
 ### Negative vs both
 ```{r}
-tmp <- as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  left_join(CpGsSum, by = "CpG") %>%
+tmp <- methyAnnot %>%
   filter(!Direction %in% c("Non-significant", "Positive")) 
 t <- table(factor(tmp$Direction, levels = c("Negative", "Both")), tmp$GeneRel)
 t
@@ -259,10 +256,7 @@ CpGs negatively associated with gene expression are more likely to be present in
 ### Mono vs multi
 
 ```{r}
-tmp <- as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  left_join(CpGsSum, by = "CpG")
-t <- table(tmp$Type, tmp$GeneRel)
+t <- table(methyAnnot$Type, methyAnnot$GeneRel)
 t
 chisq.test(t)
 
@@ -274,3 +268,195 @@ orMuAll <- round(t[2, 1]*t[3, 2]/(t[2, 2]*t[3, 1]), 2)
 
 CpGs that change expression of one gene, are more likely to be in the genic region than CpGs affecting expression of several genes (OR: `r orMoMu`) or than CpGs not-affecting gene expression (OR: `r orMoAll`). CpGs affecting the expression of multiple TCs are less likely to be in genic regions (OR: `r orMuAll`).
 
+## Position with respect to gene 
+
+Next, we tested whether CpGs associated with gene expression were located in specific position with respect to genes.
+
+### Associated vs not-associated
+
+```{r}
+## Create summary tibble
+posSum <- methyAnnot %>%
+  group_by(Type, Direction) %>%
+  summarize(TSS1500in = sum(TSS1500),
+            TSS1500ou = sum(!TSS1500),
+            TSS200in = sum(TSS200),
+            TSS200ou = sum(!TSS200),
+            UTR5in = sum(UTR5),
+            UTR5ou = sum(!UTR5),
+            FirstExonin = sum(FirstExon),
+            FirstExonou = sum(!FirstExon),
+            Bodyin = sum(Body),
+            Bodyou = sum(!Body),
+            UTR3in = sum(UTR3),
+            UTR3ou = sum(!UTR3)) %>%
+  mutate(Type0 = ifelse(Type == "Non-significant", "Non-significant", "Significant"))
+
+## Define vars and function
+gpos <- colnames(tmp) %>%
+  gsub(pattern = "in|ou", replacement = "") %>%
+  unique()
+gpos <- gpos[gpos != "Type0"]
+
+getOR <- function(cols, df){
+  t <- data.matrix(df[, cols])
+  or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
+  p.val <- chisq.test(t)$p.value
+  c(OR = or, p.val = p.val)
+}
+
+makePlot <- function(y, title){
+   as_tibble(y) %>%
+  mutate(Estimate = c("OR", "p.value")) %>%
+  gather("Position", "Value", 1:length(gpos)) %>%
+  spread(Estimate, Value) %>%
+  mutate(p.val.thres = ifelse(p.value > 0.05, "P > 0.05", 
+                              ifelse(p.value < 1e-3, "P < 0.001", "P < 0.05"))) %>%
+  ggplot(aes(x = Position, y = OR, fill = p.val.thres)) + 
+  geom_bar(stat = "identity", colour = "black") + 
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "Position with respect gene", 
+                   limits = c("TSS1500", "TSS200", "UTR5", "FirstExon", "Body", "UTR3")) +
+  scale_fill_manual(name = "", values = c("white", "grey70", "black")) +
+  ggtitle(title) +
+  theme_bw() + theme(plot.title = element_text(hjust = 0.5))
+}
+
+
+
+tmp <- posSum %>%
+  group_by(Type0) %>%
+  select(ends_with("in"), ends_with("ou")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Type0))
+
+
+sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
+  makePlot(title = "Distribution CpGs Associated vs Non-associated")
+
+```
+
+CpGs associated with gene expression are more frequent in TSS1500 but more rare in TSS200 and FirstExon than CpGs not associated with gene expression.
+
+
+### Directions vs non-associated
+```{r}
+scale <- scale_y_continuous(trans = "log2", 
+                            breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
+                            limits = c(0.6, 1.8))
+
+tmp <- posSum %>%
+  filter(Direction %in% c("Negative", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(ends_with("in"), ends_with("ou")) %>%
+  summarize_all(list(sum)) 
+
+pNeg <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
+  makePlot("Distribution CpGs Negative vs Non-significant") + scale
+
+
+tmp <- posSum %>%
+  filter(Direction %in% c("Positive", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(ends_with("in"), ends_with("ou")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Direction))
+
+pPos <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
+ makePlot("Distribution CpGs Positive vs Non-significant") + scale
+
+tmp <- posSum %>%
+  filter(Direction %in% c("Both", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(ends_with("in"), ends_with("ou")) %>%
+  summarize_all(list(sum)) 
+
+pBoth <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
+ makePlot("Distribution CpGs Both vs Non-significant") + scale
+
+plot_grid(pNeg, pPos, pBoth, ncol = 3)
+```
+
+CpGs associated with gene expression are more frequent in TSS1500 and less frequent in First Exon independent of the direction of the effect. Only CpGs positively associated with gene expression are less frequent in TSS200. 
+
+### Differences between direction
+```{r}
+scale <- scale_y_continuous(trans = "log2", 
+                            breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
+                            limits = c(0.6, 1.8))
+
+tmp <- posSum %>%
+  filter(Direction %in% c("Negative", "Positive")) %>%
+  group_by(Direction) %>%
+  select(ends_with("in"), ends_with("ou")) %>%
+  summarize_all(list(sum)) 
+
+pNP <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
+  makePlot("Distribution CpGs Negative vs Positive") + scale
+
+
+tmp <- posSum %>%
+  filter(Direction %in% c("Negative", "Both")) %>%
+  group_by(Direction) %>%
+  select(ends_with("in"), ends_with("ou")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Direction))
+
+pNB <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
+ makePlot("Distribution CpGs Negative vs Both") + scale
+
+tmp <- posSum %>%
+  filter(Direction %in% c("Positive", "Both")) %>%
+  group_by(Direction) %>%
+  select(ends_with("in"), ends_with("ou")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Direction))
+
+pPB <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
+ makePlot("Distribution CpGs Positive vs Both") + scale
+
+plot_grid(pNP, pNB, pPB, ncol = 3)
+```
+
+When comparing between CpGs associated with gene expression, CpGs positively associated with gene expression are less frequent in TSS200. CpGs associated positively and negatively with gene expression are more frequent in TSS1500 and less frequent in gene body. 
+
+### Mono vs Multi vs Non-significant
+```{r}
+scale <- scale_y_continuous(trans = "log2", 
+                            breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
+                            limits = c(0.65, 1.5))
+
+tmp <- posSum %>%
+  filter(Type %in% c("Mono", "Non-significant")) %>%
+  group_by(Type) %>%
+  select(ends_with("in"), ends_with("ou")) %>%
+  summarize_all(list(sum)) 
+
+p1 <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
+  makePlot("Distribution CpGs Mono vs Non-significant") + scale
+
+
+tmp <- posSum %>%
+  filter(Type %in% c("Multi", "Non-significant")) %>%
+  group_by(Type) %>%
+  select(ends_with("in"), ends_with("ou")) %>%
+  summarize_all(list(sum))
+
+p2 <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
+ makePlot("Distribution CpGs Multi vs Non-significant") + scale
+
+tmp <- posSum %>%
+  filter(Type %in% c("Mono", "Multi")) %>%
+  group_by(Type) %>%
+  select(ends_with("in"), ends_with("ou")) %>%
+  summarize_all(list(sum))
+
+p3 <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
+ makePlot("Distribution CpGs Mono vs Multi") + scale
+
+plot_grid(p1, p2, p3, ncol = 3)
+```
+
+CpGs associated with gene expression are more frequent in TSS1500, independent of how many TCs they affect. CpGs affecting one gene are less frequent in TSS200 and more frequent in gene body with respect to CpGs not affecting gene expression or changing the expression of different TCs. CpGs affecting several genes are less frequent in First Exon and Body with respect to CpGs not associated with gene expression or with CpGs associated with one TC. 
