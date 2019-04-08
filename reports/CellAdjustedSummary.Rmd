@@ -372,7 +372,7 @@ tmp <- posSum %>%
 pBoth <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
  makePlot("Distribution CpGs Both vs Non-significant") + scale
 
-plot_grid(pNeg, pPos, pBoth, ncol = 3)
+plot_grid(pNeg, pPos, pBoth, nrow = 3)
 ```
 
 CpGs associated with gene expression are more frequent in TSS1500 and less frequent in First Exon independent of the direction of the effect. Only CpGs positively associated with gene expression are less frequent in TSS200. 
@@ -413,7 +413,7 @@ tmp <- posSum %>%
 pPB <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
  makePlot("Distribution CpGs Positive vs Both") + scale
 
-plot_grid(pNP, pNB, pPB, ncol = 3)
+plot_grid(pNP, pNB, pPB, nrow = 3)
 ```
 
 When comparing between CpGs associated with gene expression, CpGs positively associated with gene expression are less frequent in TSS200. CpGs associated positively and negatively with gene expression are more frequent in TSS1500 and less frequent in gene body. 
@@ -452,7 +452,7 @@ tmp <- posSum %>%
 p3 <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
  makePlot("Distribution CpGs Mono vs Multi") + scale
 
-plot_grid(p1, p2, p3, ncol = 3)
+plot_grid(p1, p2, p3, nrow = 3)
 ```
 
 CpGs associated with gene expression are more frequent in TSS1500, independent of how many TCs they affect. CpGs affecting one gene are less frequent in TSS200 and more frequent in gene body with respect to CpGs not affecting gene expression or changing the expression of different TCs. CpGs affecting several genes are less frequent in First Exon and Body with respect to CpGs not associated with gene expression or with CpGs associated with one TC. 
