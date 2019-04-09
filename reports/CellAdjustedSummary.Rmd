@@ -94,9 +94,9 @@ We evaluated whether CpGs associated with gene expression were closer to the TCs
 
 ```{r}
 df_comp <- inner_join(df, overDF, by = c("CpG", "TC"))
-ggplot(df_comp, aes(x = Distance, fill = sigPair)) + geom_density(alpha=0.4) + 
+ggplot(df_comp, aes(x = Distance, color = sigPair)) + geom_density() + 
   theme_bw() + 
-  scale_fill_discrete(name = "", labels = c("Non-significant", "Significant"))
+  scale_color_discrete(name = "", labels = c("Non-significant", "Significant"))
 ```
 
 CpGs tend to be associated with expression of close TCs. We do not observe differences when CpGs are upstream or downstream. 
@@ -107,17 +107,17 @@ CpGs tend to be associated with expression of close TCs. We do not observe diffe
 pA <- df_comp %>% 
   filter(sigPair == TRUE) %>%
   mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
-  ggplot(aes(x = Distance, fill = class)) + geom_density(alpha=0.4) + 
+  ggplot(aes(x = Distance, color = class)) + geom_density() + 
   theme_bw() + 
-  scale_fill_discrete(name = "")
+  scale_color_discrete(name = "")
 
 pB <- df_comp %>% 
   filter(sigPair == TRUE) %>%
   mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
-  ggplot(aes(x = abs(Distance) + 1, fill = class)) + geom_density(alpha=0.4) + 
+  ggplot(aes(x = abs(Distance) + 1, color = class)) + geom_density(alpha=0.4) + 
   theme_bw() + 
   scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 10000), labels = c("10b", "1Kb", "100Kb")) + 
-  scale_fill_discrete(name = "")
+  scale_color_discrete(name = "")
 
 plot_grid(pA, pB, nrow = 2)
 
@@ -136,17 +136,17 @@ CpGs associated negatively to TCs are on average 14Kb closer to the TSS than CpG
 pA <- df_comp %>% 
   filter(sigPair == TRUE) %>%
   mutate(class = ifelse(CpG %in% CpGs1, "Mono", "Multi")) %>%
-  ggplot(aes(x = Distance, fill = class)) + geom_density(alpha=0.4) + 
+  ggplot(aes(x = Distance, color = class)) + geom_density() + 
   theme_bw() + 
-  scale_fill_discrete(name = "")
+  scale_color_discrete(name = "")
 
 pB <- df_comp %>% 
   filter(sigPair == TRUE) %>%
   mutate(class = ifelse(CpG %in% CpGs1, "Mono", "Multi")) %>%
-  ggplot(aes(x = abs(Distance) + 1, fill = class)) + geom_density(alpha=0.4) + 
+  ggplot(aes(x = abs(Distance) + 1, color = class)) + geom_density() + 
   theme_bw() + 
   scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 10000), labels = c("10b", "1Kb", "100Kb")) + 
-  scale_fill_discrete(name = "")
+  scale_color_discrete(name = "")
 
 plot_grid(pA, pB, nrow = 2)
 
@@ -166,10 +166,10 @@ df_comp %>%
   mutate(CpGclass = ifelse(CpG %in% CpGs1, "Mono", "Multi"), 
          AssocClass = ifelse(CpG %in% posNeg, "Both",
                              ifelse(FC > 0, "Positive", "Negative"))) %>%
-  ggplot(aes(x = abs(Distance) + 1, fill = AssocClass)) + geom_density(alpha=0.4) + 
+  ggplot(aes(x = abs(Distance) + 1, color = AssocClass)) + geom_density(alpha=0.4) + 
   theme_bw() + facet_wrap(~CpGclass) + 
   scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 10000), labels = c("10b", "1Kb", "100Kb")) + 
-  scale_fill_discrete(name = "")
+  scale_color_discrete(name = "")
 
 df_comp %>% 
   filter(sigPair == TRUE) %>%
