@@ -320,8 +320,6 @@ makePlot <- function(y, title){
   theme_bw() + theme(plot.title = element_text(hjust = 0.5))
 }
 
-
-
 tmp <- posSum %>%
   group_by(Type0) %>%
   select(ends_with("in"), ends_with("ou")) %>%
@@ -372,7 +370,7 @@ tmp <- posSum %>%
 pBoth <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
  makePlot("Distribution CpGs Both vs Non-significant") + scale
 
-plot_grid(pNeg, pPos, pBoth, nrow = 3)
+plot_grid(pNeg, pPos, pBoth, ncol = 3)
 ```
 
 CpGs associated with gene expression are more frequent in TSS1500 and less frequent in First Exon independent of the direction of the effect. Only CpGs positively associated with gene expression are less frequent in TSS200. 
@@ -413,7 +411,7 @@ tmp <- posSum %>%
 pPB <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
  makePlot("Distribution CpGs Positive vs Both") + scale
 
-plot_grid(pNP, pNB, pPB, nrow = 3)
+plot_grid(pNP, pNB, pPB, ncol = 3)
 ```
 
 When comparing between CpGs associated with gene expression, CpGs positively associated with gene expression are less frequent in TSS200. CpGs associated positively and negatively with gene expression are more frequent in TSS1500 and less frequent in gene body. 
@@ -452,7 +450,257 @@ tmp <- posSum %>%
 p3 <- sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
  makePlot("Distribution CpGs Mono vs Multi") + scale
 
-plot_grid(p1, p2, p3, nrow = 3)
+plot_grid(p1, p2, p3, ncol = 3)
 ```
 
 CpGs associated with gene expression are more frequent in TSS1500, independent of how many TCs they affect. CpGs affecting one gene are less frequent in TSS200 and more frequent in gene body with respect to CpGs not affecting gene expression or changing the expression of different TCs. CpGs affecting several genes are less frequent in First Exon and Body with respect to CpGs not associated with gene expression or with CpGs associated with one TC. 
+
+## Chromatin state
+
+Next, we tested whether CpGs associated with gene expression were distrubted in different chromatin status.
+
+We used a model of 15 states. First, we tested the enrichment by grouping these states by their definition in https://www.nature.com/articles/nature14248:
+
+> The active states (associated with expressed genes) consist of active transcription start site (TSS) proximal promoter states (TssA, TssAFlnk), a transcribed state at the 5′ and 3′ end of genes showing both promoter and enhancer signatures (TxFlnk), actively transcribed states (Tx, TxWk), enhancer states (Enh, EnhG), and a state associated with zinc finger protein genes (ZNF/Rpts). The inactive states consist of constitutive heterochromatin (Het), bivalent regulatory states (TssBiv, BivFlnk, EnhBiv), repressed Polycomb states (ReprPC, ReprPCWk), and a quiescent state (Quies). 
+
+Para esto habría que recalcular los estados previamente !!!!
+
+### Associated vs not-associated
+```{r, eval = FALSE}
+
+chromSumGroup <- methyAnnot %>%
+  group_by(Type, Direction) %>%
+  summarize(TSSproxIn = sum(TssA | TssAFlnk), 
+            TSSproxOut = sum(!(TssA | TssAFlnk)),
+            ActTransIn = sum(Tx | TxWk), 
+            ActTransOut = sum(!(Tx | TxWk)),
+            
+            BivRegIn = sum(TssBiv | BivFlnk | EnhBiv), 
+            BivRegOut = sum(!(TssBiv | BivFlnk | EnhBiv)), 
+            reprPolyIn = sum(ReprPC | ReprPCWk), 
+             reprPolyOut = sum(!(ReprPC | ReprPCWk))) %>%
+  mutate(Type0 = ifelse(Type == "Non-significant", "Non-significant", "Significant"))
+
+groups <- c("TSSprox", "ActTrans", "BivReg", "reprPoly")
+
+## Define vars and function
+getOR <- function(cols, df){
+  t <- data.matrix(df[, cols])
+  or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
+  p.val <- chisq.test(t)$p.value
+  c(OR = or, p.val = p.val)
+}
+
+makePlot <- function(y, title, groups){
+   as_tibble(y) %>%
+  mutate(Estimate = c("OR", "p.value")) %>%
+  gather("Position", "Value", 1:length(groups)) %>%
+  spread(Estimate, Value) %>%
+  mutate(p.val.thres = ifelse(p.value > 0.05, "P > 0.05", 
+                              ifelse(p.value < 1e-3, "P < 0.001", "P < 0.05"))) %>%
+  ggplot(aes(x = Position, y = OR, fill = p.val.thres)) + 
+  geom_bar(stat = "identity", colour = "black") + 
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "Chromatin State Groups", 
+                   limits = groups) +
+  scale_fill_manual(name = "", values = c("white", "grey70", "black")) +
+  ggtitle(title) +
+  theme_bw() + theme(plot.title = element_text(hjust = 0.5))
+}
+
+tmp <- chromSumGroup %>%
+  group_by(Type0) %>%
+  select(ends_with("In"), ends_with("Out")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Type0))
+
+
+sapply(groups, function(x) getOR(paste0(x, c("In", "Out")), tmp)) %>%
+  makePlot(title = "Distribution CpGs Associated vs Non-associated", groups = groups)
+```
+
+Next, we tested the enrichment in each chromatin state. 
+
+### Associated vs not-associated
+
+```{r}
+## Create summary tibble
+sum2 <- function(x) sum(!x)
+
+chromStates <- c("TssA", "TssAFlnk", "TxFlnk", "TxWk", "Tx", "EnhG", "Enh",
+                 "ZNF.Rpts", "Het", "TssBiv", "BivFlnk", "EnhBiv", "ReprPC",
+                 "ReprPCWk", "Quies")
+
+chromSum <- methyAnnot %>%
+  group_by(Type, Direction) %>%
+  summarize_at(chromStates, funs(sum, sum2)) %>%
+  mutate(Type0 = ifelse(Type == "Non-significant", "Non-significant", "Significant"))
+
+## Define vars and function
+getOR <- function(cols, df){
+  t <- data.matrix(df[, cols])
+  or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
+  p.val <- chisq.test(t)$p.value
+  c(OR = or, p.val = p.val)
+}
+
+makePlot <- function(y, title){
+   as_tibble(y) %>%
+  mutate(Estimate = c("OR", "p.value")) %>%
+  gather("Position", "Value", 1:length(chromStates)) %>%
+  spread(Estimate, Value) %>%
+  mutate(p.val.thres = ifelse(p.value > 0.05, "P > 0.05", 
+                              ifelse(p.value < 1e-3, "P < 0.001", "P < 0.05")), 
+         Group = factor(ifelse(Position %in% c("TssA", "TssAFlnk"), "TssProxProm",
+                        ifelse(Position %in% c("Tx", "TxWk"), "ActTrans", 
+                               ifelse(Position %in% c("Enh", "EnhG"), "Enhancer", 
+                                      ifelse(Position %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", ifelse(Position %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Position))))), 
+                        levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies"))) %>%
+  ggplot(aes(x = Position, y = OR, fill = p.val.thres)) + 
+  geom_bar(stat = "identity", colour = "black") + 
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "Chromatin State") +
+  scale_fill_manual(name = "", values = c("white", "grey70", "black")) +
+  ggtitle(title) +
+    facet_grid(~ Group, scales = "free") +
+  theme_bw() + theme(plot.title = element_text(hjust = 0.5))
+}
+
+tmp <- chromSum %>%
+  group_by(Type0) %>%
+  select(ends_with("sum"), ends_with("sum2")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Type0))
+
+
+sapply(chromStates, function(x) getOR(paste0(x, c("_sum", "_sum2")), tmp)) %>%
+  makePlot(title = "Distribution CpGs Associated vs Non-associated")
+```
+
+CpGs associated with gene expression are more frequent in proximal promoters, enhancers and a state associated with zinc finger protein genes but not with region associated with low expression, such as repressed polycomb. 
+
+
+### Directions vs non-associated
+```{r}
+scale <- scale_y_continuous(trans = "log2", 
+                            breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
+                            limits = c(0.5, 4))
+
+tmp <- chromSum %>%
+  filter(Direction %in% c("Negative", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(ends_with("sum"), ends_with("sum2")) %>%
+  summarize_all(list(sum)) 
+
+pNeg <- sapply(chromStates, function(x) getOR(paste0(x, c("_sum", "_sum2")), tmp)) %>%
+  makePlot("Distribution CpGs Negative vs Non-significant") + scale
+
+
+tmp <- chromSum %>%
+  filter(Direction %in% c("Positive", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(ends_with("sum"), ends_with("sum2")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Direction))
+
+pPos <- sapply(chromStates, function(x) getOR(paste0(x, c("_sum", "_sum2")), tmp)) %>%
+ makePlot("Distribution CpGs Positive vs Non-significant") + scale
+
+tmp <- chromSum %>%
+  filter(Direction %in% c("Both", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(ends_with("sum"), ends_with("sum2")) %>%
+  summarize_all(list(sum)) 
+
+pBoth <-  sapply(chromStates, function(x) getOR(paste0(x, c("_sum", "_sum2")), tmp)) %>%
+ makePlot("Distribution CpGs Both vs Non-significant") + scale
+
+plot_grid(pNeg, pPos, pBoth, nrow = 3)
+```
+
+CpGs associated negatively and positive and negatively are more frequent than non-associated CpGs in the same regions (Proximal promoters and Enhancers) and they are also less frequent in inactive states (repressed polycomb and quiescent). On the other hand, CpGs associated positively with gene expression were more frequent than non-associated CpGs in inactive regions and less frequent in TxFlnk.
+
+### Differences between direction
+```{r}
+scale <- scale_y_continuous(trans = "log2", 
+                            breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
+                            limits = c(0.3, 4))
+
+tmp <- chromSum %>%
+  filter(Direction %in% c("Negative", "Positive")) %>%
+  group_by(Direction) %>%
+  select(ends_with("sum"), ends_with("sum2")) %>%
+  summarize_all(list(sum)) 
+
+pNP <- sapply(chromStates, function(x) getOR(paste0(x, c("_sum", "_sum2")), tmp)) %>%
+  makePlot("Distribution CpGs Negative vs Positive") + scale
+
+
+tmp <- chromSum %>%
+  filter(Direction %in% c("Negative", "Both")) %>%
+  group_by(Direction) %>%
+  select(ends_with("sum"), ends_with("sum2")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Direction))
+
+pNB <- sapply(chromStates, function(x) getOR(paste0(x, c("_sum", "_sum2")), tmp)) %>%
+ makePlot("Distribution CpGs Negative vs Both") + scale
+
+tmp <- chromSum %>%
+  filter(Direction %in% c("Positive", "Both")) %>%
+  group_by(Direction) %>%
+  select(ends_with("sum"), ends_with("sum2")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Direction))
+
+pPB <- sapply(chromStates, function(x) getOR(paste0(x, c("_sum", "_sum2")), tmp)) %>%
+ makePlot("Distribution CpGs Positive vs Both") + scale
+
+plot_grid(pNP, pNB, pPB, nrow = 3)
+```
+
+In concordance with previous results, we did not observe many differences between CpGs negatively associated with gene expression or CpGs associated negatively and positively with gene expression. When comparing these CpGs with those that change expression positively, the former are more frequent in active states (TssProxProm, TxFlnk, Enhancer and ZNF) and less frequent in inactive states (ReprPoly and Quies). 
+
+
+### Mono vs Multi vs Non-significant
+```{r}
+scale <- scale_y_continuous(trans = "log2", 
+                            breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
+                            limits = c(0.4, 4))
+
+tmp <- chromSum %>%
+  filter(Type %in% c("Mono", "Non-significant")) %>%
+  group_by(Type) %>%
+  select(ends_with("sum"), ends_with("sum2")) %>%
+  summarize_all(list(sum)) 
+
+p1 <- sapply(chromStates, function(x) getOR(paste0(x, c("_sum", "_sum2")), tmp)) %>%
+  makePlot("Distribution CpGs Mono vs Non-significant") + scale
+
+
+tmp <- chromSum %>%
+  filter(Type %in% c("Multi", "Non-significant")) %>%
+  group_by(Type) %>%
+  select(ends_with("sum"), ends_with("sum2")) %>%
+  summarize_all(list(sum))
+
+p2 <- sapply(chromStates, function(x) getOR(paste0(x, c("_sum", "_sum2")), tmp)) %>%
+ makePlot("Distribution CpGs Multi vs Non-significant") + scale
+
+tmp <- chromSum %>%
+  filter(Type %in% c("Mono", "Multi")) %>%
+  group_by(Type) %>%
+  select(ends_with("sum"), ends_with("sum2")) %>%
+  summarize_all(list(sum))
+
+p3 <- sapply(chromStates, function(x) getOR(paste0(x, c("_sum", "_sum2")), tmp)) %>%
+ makePlot("Distribution CpGs Mono vs Multi") + scale
+
+plot_grid(p1, p2, p3, nrow = 3)
+```
+
+CpGs associated with gene expression are more frequent in the same states, independent of the number of TCs they are associated with. The main differences that we observed were that CpGs that are associated with different TCs tend to be more frequent in ZNF regions and in bivalent regulatory states. 
