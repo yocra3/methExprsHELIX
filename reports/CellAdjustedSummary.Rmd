@@ -5,8 +5,8 @@ author:
 
 date: "`r Sys.Date()`"
 output:
-  pdf_document: default
-  html_document: default
+    BiocStyle::html_document:
+      toc_float: true
 ---
 
 ```{r setup, include=FALSE}
