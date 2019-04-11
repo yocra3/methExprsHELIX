@@ -27,14 +27,14 @@ if (base == "cpgs"){
 }
 
 load("results/preprocessFiles/allOverlaps.Rdata")
-overAll$pair <- paste0(overAll$CpG, overAll$TC)
+overDF$pair <- paste0(overDF$CpG, overDF$TC)
 
 ## Load results
 files <- dir(resFolder, pattern = "outputchr", full.names = TRUE)
 resList <- lapply(files, function(x) read.table(gzfile(x), as.is = TRUE))
 df <- Reduce(rbind, resList)
 colnames(df) <- c("CpG", "TC", "FC", "SD", "p.value", "CI0.05", "CI0.95")
-df[paste0(df$CpG, df$TC) %in% overAll$pair, ]
+df <- df[paste0(df$CpG, df$TC) %in% overDF$pair, ]
 
 ## Compute p-value per feature
 if (base == "cpgs"){
@@ -54,7 +54,7 @@ featPvals <- function(feat, df, distr, base){
 }
 
 featsPvals <- pbsapply(feats, featPvals, df = df, distr = distr, base = base, 
-                     cl = 15)
+                     cl = 7)
 featStatsDF <- data.frame(feat = feats, p.val = featsPvals, p.val.adj = p.adjust(featsPvals),
                           stringsAsFactors = FALSE)
 sigFeats <- subset(featStatsDF, p.val.adj < 0.05)$feat
@@ -75,6 +75,6 @@ col <- ifelse(base == "cpgs", "CpG", "TC")
 }
 
 df$sigPair <- pbsapply(seq_len(nrow(df)), isSig, df = df, distr = distr, base = base, 
-                sigFeats = sigFeats, thres = thresP, cl = 15)
+                sigFeats = sigFeats, thres = thresP, cl = 7)
 
 save(df, featStatsDF, sigFeats, file = paste0(resFolder, "/allres_simP_", base, ".Rdata"))

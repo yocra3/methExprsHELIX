@@ -15,7 +15,7 @@ for(i in 1:length(arg)){
 }
 
 load("results/preprocessFiles/allOverlaps.Rdata")
-overAll$pair <- paste0(overAll$CpG, overAll$TC)
+overDF$pair <- paste0(overDF$CpG, overDF$TC)
 
 if (type == "autosome"){
   chr <- 1:22
@@ -37,7 +37,7 @@ getBetaDistributionsCpGs <- function(folder, chr = 1:22){
       df <- read.table(gzfile(paste0(simFold, "/outputchr", chrom, ".txt.gz")),
                  as.is = TRUE)
       ### Remove bad overlaps (solve bug)
-      df[paste0(df$V1, df$V2) %in% overAll$pair, ]
+      df[paste0(df$V1, df$V2) %in% overDF$pair, ]
     })
     CpGs <- unique(resList[[1]]$V1)
     
@@ -62,7 +62,7 @@ getBetaDistributionsCpGs <- function(folder, chr = 1:22){
       param <- nlm(llhd2, x=pmin, p=pIni)$estimate
       
       param
-    }, mc.cores = 5)
+    }, mc.cores = 15)
     names(distrs) <- CpGs
     distrs
     
