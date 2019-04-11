@@ -116,7 +116,7 @@ pB <- df_comp %>%
   mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
   ggplot(aes(x = abs(Distance) + 1, color = class)) + geom_density(alpha=0.4) + 
   theme_bw() + 
-  scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 10000), labels = c("10b", "1Kb", "100Kb")) + 
+  scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 1e5), labels = c("10b", "1Kb", "100Kb")) + 
   scale_color_discrete(name = "")
 
 plot_grid(pA, pB, nrow = 2)
@@ -145,7 +145,7 @@ pB <- df_comp %>%
   mutate(class = ifelse(CpG %in% CpGs1, "Mono", "Multi")) %>%
   ggplot(aes(x = abs(Distance) + 1, color = class)) + geom_density() + 
   theme_bw() + 
-  scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 10000), labels = c("10b", "1Kb", "100Kb")) + 
+  scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 1e5), labels = c("10b", "1Kb", "100Kb")) + 
   scale_color_discrete(name = "")
 
 plot_grid(pA, pB, nrow = 2)
@@ -168,7 +168,7 @@ df_comp %>%
                              ifelse(FC > 0, "Positive", "Negative"))) %>%
   ggplot(aes(x = abs(Distance) + 1, color = AssocClass)) + geom_density(alpha=0.4) + 
   theme_bw() + facet_wrap(~CpGclass) + 
-  scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 10000), labels = c("10b", "1Kb", "100Kb")) + 
+  scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 1e5), labels = c("10b", "1Kb", "100Kb")) + 
   scale_color_discrete(name = "")
 
 df_comp %>% 
@@ -267,6 +267,183 @@ orMuAll <- round(t[2, 1]*t[3, 2]/(t[2, 2]*t[3, 1]), 2)
 ```
 
 CpGs that change expression of one gene, are more likely to be in the genic region than CpGs affecting expression of several genes (OR: `r orMoMu`) or than CpGs not-affecting gene expression (OR: `r orMoAll`). CpGs affecting the expression of multiple TCs are less likely to be in genic regions (OR: `r orMuAll`).
+
+## Relation to CpG Island
+
+Next, we tested whether CpGs associated with gene expression were distrubted in different CpG Island positions.
+
+### Associated vs not-associated
+
+```{r}
+## Create summary tibble
+islandStates <- c("N_Shelf", "N_Shore", "Island", "S_Shore", "S_Shelf", "OpenSea")
+
+islSum <- methyAnnot %>%
+  group_by(Type, Direction, Relation_to_Island) %>%
+  summarize(n = n()) %>%
+  spread(Relation_to_Island, n) %>%
+  mutate(Type0 = ifelse(Type == "Non-significant", "Non-significant", "Significant"), 
+         tot = sum(Island, N_Shelf, N_Shore, OpenSea, S_Shelf, S_Shore))
+
+## Define vars and function
+getOR <- function(col, df){
+  t <- data.matrix(df[, c(col, colnames(df)[ncol(df)])])
+  t[, 2] <- t[, 2] - t[, 1]
+  or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
+  p.val <- chisq.test(t)$p.value
+  c(OR = or, p.val = p.val)
+}
+
+makePlot <- function(y, title){
+   as_tibble(y) %>%
+  mutate(Estimate = c("OR", "p.value")) %>%
+  gather("Position", "Value", 1:length(islandStates)) %>%
+  spread(Estimate, Value) %>%
+  mutate(p.val.thres = ifelse(p.value > 0.05, "P > 0.05", 
+                              ifelse(p.value < 1e-3, "P < 0.001", "P < 0.05"))) %>%
+  ggplot(aes(x = Position, y = OR, fill = p.val.thres)) + 
+  geom_bar(stat = "identity", colour = "black") + 
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "CpG Island", limits  = islandStates) +
+  scale_fill_manual(name = "", values = c("white", "grey70", "black")) +
+  ggtitle(title) +
+    theme_bw() + theme(plot.title = element_text(hjust = 0.5))
+}
+
+tmp <- islSum %>%
+  group_by(Type0) %>%
+  select(-c(1:2)) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Type0))
+
+
+sapply(islandStates, function(x) getOR(x, tmp)) %>%
+  makePlot(title = "Distribution CpGs Associated vs Non-associated")
+```
+
+CpGs associated with gene expression are more frequent shore regions and less frequent in island and open sea. 
+
+### Directions vs non-associated
+```{r}
+scale <- scale_y_continuous(trans = "log2", 
+                            breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
+                            limits = c(0.5, 2.5))
+
+tmp <- islSum %>%
+  filter(Direction %in% c("Negative", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum)) 
+
+pNeg <- sapply(islandStates, function(x) getOR(x, tmp)) %>%
+  makePlot("Distribution CpGs Negative vs Non-significant") + scale
+
+
+tmp <- islSum %>%
+  filter(Direction %in% c("Positive", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Direction))
+
+pPos <- sapply(islandStates, function(x) getOR(x, tmp)) %>%
+ makePlot("Distribution CpGs Positive vs Non-significant") + scale
+
+tmp <- islSum %>%
+  filter(Direction %in% c("Both", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum)) 
+
+pBoth <- sapply(islandStates, function(x) getOR(x, tmp)) %>%
+ makePlot("Distribution CpGs Both vs Non-significant") + scale
+
+plot_grid(pNeg, pPos, pBoth, nrow = 3)
+```
+
+We did not observe differences in the distribution in CpG islands due to the effect direction. 
+
+### Differences between direction
+```{r}
+scale <- scale_y_continuous(trans = "log2", 
+                            breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
+                            limits = c(0.5, 2.5))
+
+tmp <- islSum %>%
+  filter(Direction %in% c("Negative", "Positive")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum)) 
+
+pNP <-  sapply(islandStates, function(x) getOR(x, tmp)) %>%
+  makePlot("Distribution CpGs Negative vs Positive") + scale
+
+
+tmp <- islSum %>%
+  filter(Direction %in% c("Negative", "Both")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Direction))
+
+pNB <-  sapply(islandStates, function(x) getOR(x, tmp)) %>%
+ makePlot("Distribution CpGs Negative vs Both") + scale
+
+tmp <- islSum %>%
+  filter(Direction %in% c("Positive", "Both")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Direction))
+
+pPB <-  sapply(islandStates, function(x) getOR(x, tmp)) %>%
+ makePlot("Distribution CpGs Positive vs Both") + scale
+
+plot_grid(pNP, pNB, pPB, nrow = 3)
+```
+
+When directly comparing CpGs by the direction of the effect on gene expression, CpGs changing negatively are more frequent in S-shores while CpGs changing positively gene expression are less frequent in these regions, being CpGs with a dual behaviour in the middle. 
+
+### Mono vs Multi vs Non-significant
+```{r}
+scale <- scale_y_continuous(trans = "log2", 
+                            breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
+                            limits = c(0.5, 2.5))
+
+tmp <- islSum %>%
+  filter(Type %in% c("Mono", "Non-significant")) %>%
+  group_by(Type) %>%
+  select(-c(2, 9)) %>%
+  summarize_all(list(sum)) 
+
+p1 <- sapply(islandStates, function(x) getOR(x, tmp)) %>%
+  makePlot("Distribution CpGs Mono vs Non-significant") + scale
+
+
+tmp <- islSum %>%
+  filter(Type %in% c("Multi", "Non-significant")) %>%
+  group_by(Type) %>%
+  select(-c(2, 9)) %>%
+  summarize_all(list(sum))
+
+p2 <- sapply(islandStates, function(x) getOR(x, tmp)) %>%
+ makePlot("Distribution CpGs Multi vs Non-significant") + scale
+
+tmp <- islSum %>%
+  filter(Type %in% c("Mono", "Multi")) %>%
+  group_by(Type) %>%
+  select(-c(2, 9)) %>%
+  summarize_all(list(sum))
+
+p3 <- sapply(islandStates, function(x) getOR(x, tmp)) %>%
+ makePlot("Distribution CpGs Mono vs Multi") + scale
+
+plot_grid(p1, p2, p3, nrow = 3)
+```
+
+When comparing CpGs by the number of TCs they change, we do not observe any differences. 
 
 ## Position with respect to gene 
 
@@ -704,3 +881,374 @@ plot_grid(p1, p2, p3, nrow = 3)
 ```
 
 CpGs associated with gene expression are more frequent in the same states, independent of the number of TCs they are associated with. The main differences that we observed were that CpGs that are associated with different TCs tend to be more frequent in ZNF regions and in bivalent regulatory states. 
+
+## Age 
+
+Next, we tested whether CpGs associated with gene expression also changed their methylation because of age (data from: https://www.ncbi.nlm.nih.gov/pubmed/28056824)
+
+### Associated vs not-associated
+
+```{r}
+agedf <- read.csv2("data/DiffMethyAgeCpGs.csv", as.is = TRUE)
+agedf <- agedf %>%
+  as_tibble() %>%
+  mutate(Dir = ifelse(as.numeric(beta8.avg) > as.numeric(beta0.avg), "Increasing", "Decreasing"), 
+         CpG = ILMNID)
+
+ageSum <- methyAnnot %>%
+  select(CpG, Type, Direction) %>%
+  left_join(agedf, by = "CpG") %>%
+  mutate(Dir = ifelse(is.na(Dir), "Constant", Dir)) %>%
+  group_by(Type, Direction, Dir) %>%
+  summarize(n = n()) %>%
+  spread(Dir, n) %>%
+  mutate(Type0 = ifelse(Type == "Non-significant", "Non-significant", "Significant"), 
+         Changed = sum(Decreasing, Increasing), 
+         tot = sum(Changed, Constant))
+
+ageG <- c("Changed", "Decreasing", "Increasing")
+
+## Define vars and function
+getOR <- function(col, df){
+  t <- data.matrix(df[, c(col, colnames(df)[ncol(df)])])
+  t[, 2] <- t[, 2] - t[, 1]
+  or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
+  p.val <- chisq.test(t)$p.value
+  c(OR = or, p.val = p.val)
+}
+
+makePlot <- function(y, title){
+   as_tibble(y) %>%
+  mutate(Estimate = c("OR", "p.value")) %>%
+  gather("Position", "Value", 1:length(ageG)) %>%
+  spread(Estimate, Value) %>%
+  mutate(p.val.thres = ifelse(p.value > 0.05, "P > 0.05", 
+                              ifelse(p.value < 1e-3, "P < 0.001", "P < 0.05"))) %>%
+  ggplot(aes(x = Position, y = OR, fill = p.val.thres)) + 
+  geom_bar(stat = "identity", colour = "black") + 
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "CpG Island", limits  = ageG) +
+  scale_fill_manual(name = "", values = c("white", "grey70", "black")) +
+  ggtitle(title) +
+    theme_bw() + theme(plot.title = element_text(hjust = 0.5))
+}
+
+tmp <- ageSum %>%
+  group_by(Type0) %>%
+  select(-c(1:2)) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Type0))
+
+
+sapply(ageG, function(x) getOR(x, tmp)) %>%
+  makePlot(title = "Distribution CpGs Associated vs Non-associated")
+```
+
+CpGs associated with gene expression also have changes in methylation during childhood
+
+### Directions vs non-associated
+```{r}
+scale <- scale_y_continuous(trans = "log2", 
+                            breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
+                            limits = c(0.75, 8))
+
+tmp <- ageSum %>%
+  filter(Direction %in% c("Negative", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum)) 
+
+pNeg <- sapply(ageG, function(x) getOR(x, tmp))%>%
+  makePlot("Distribution CpGs Negative vs Non-significant") + scale
+
+
+tmp <- ageSum %>%
+  filter(Direction %in% c("Positive", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Direction))
+
+pPos <- sapply(ageG, function(x) getOR(x, tmp)) %>%
+ makePlot("Distribution CpGs Positive vs Non-significant") + scale
+
+tmp <- ageSum %>%
+  filter(Direction %in% c("Both", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum)) 
+
+pBoth <- sapply(ageG, function(x) getOR(x, tmp)) %>%
+ makePlot("Distribution CpGs Both vs Non-significant") + scale
+
+plot_grid(pNeg, pPos, pBoth, nrow = 3)
+```
+
+In all the cases, the DNA methylation of CpGs changing gene expression change during childhood. Interestingly, we observe that DNA methylation of CpGs that are inversely associted with gene expression is more likely to decrease during childhood while the DNA methylation of positive CpGs tend to increase during childhood. 
+
+### Differences between direction
+```{r}
+scale <- scale_y_continuous(trans = "log2", 
+                            breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
+                            limits = c(0.4, 2.5))
+
+tmp <- ageSum %>%
+  filter(Direction %in% c("Negative", "Positive")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum)) 
+
+pNP <-  sapply(ageG, function(x) getOR(x, tmp)) %>%
+  makePlot("Distribution CpGs Negative vs Positive") + scale
+
+
+tmp <- ageSum %>%
+  filter(Direction %in% c("Negative", "Both")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Direction))
+
+pNB <-  sapply(ageG, function(x) getOR(x, tmp)) %>%
+ makePlot("Distribution CpGs Negative vs Both") + scale
+
+tmp <- ageSum %>%
+  filter(Direction %in% c("Positive", "Both")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Direction))
+
+pPB <-  sapply(ageG, function(x) getOR(x, tmp)) %>%
+ makePlot("Distribution CpGs Positive vs Both") + scale
+
+plot_grid(pNP, pNB, pPB, nrow = 3)
+```
+
+We observe the same effect previously described: negative CpGs tend to decrease their methylation during childhood more than positive CpGs. 
+
+### Mono vs Multi vs Non-significant
+```{r}
+scale <- scale_y_continuous(trans = "log2", 
+                            breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
+                            limits = c(0.75, 5))
+
+tmp <- ageSum %>%
+  filter(Type %in% c("Mono", "Non-significant")) %>%
+  group_by(Type) %>%
+  select(-c(2, 6)) %>%
+  summarize_all(list(sum)) 
+
+p1 <- sapply(ageG, function(x) getOR(x, tmp)) %>%
+  makePlot("Distribution CpGs Mono vs Non-significant") + scale
+
+
+tmp <- ageSum %>%
+  filter(Type %in% c("Multi", "Non-significant")) %>%
+  group_by(Type) %>%
+  select(-c(2, 6)) %>%
+  summarize_all(list(sum))
+
+p2 <- sapply(ageG, function(x) getOR(x, tmp)) %>%
+ makePlot("Distribution CpGs Multi vs Non-significant") + scale
+
+tmp <- ageSum %>%
+  filter(Type %in% c("Mono", "Multi")) %>%
+  group_by(Type) %>%
+  select(-c(2, 6)) %>%
+  summarize_all(list(sum))
+
+p3 <- sapply(ageG, function(x) getOR(x, tmp)) %>%
+ makePlot("Distribution CpGs Mono vs Multi") + scale
+
+plot_grid(p1, p2, p3, nrow = 3)
+```
+
+When comparing CpGs by the number of TCs they change, we do not observe any differences. 
+
+
+## Heritability 
+
+Next, we tested whether CpGs associated with gene expression are heritable (data from: https://www.nature.com/articles/ncomms11115). Use criteria from paper: 
+
+- High heritability: h^2^ > 0.5
+- Low heritability: h^2^ < 0.2
+
+We evaluated full heritability and SNP heritability.
+
+(Include only CpGs present in HELIX and paper)
+
+
+### Direction of association
+
+```{r}
+## Create summary tibble
+h2df <- read.csv("data/HeritabilityCpGs", as.is = TRUE)
+h2df <- h2df %>%
+  as_tibble() %>%
+  ## Remove CpGs with NA in h2
+  filter(!is.na(h2_total)) %>%
+  mutate(HerT = ifelse(h2_total > 0.5, "High", 
+                       ifelse(h2_total < 0.2, "Low", "Medium")),
+         HerSNP = ifelse(h2_SNPs > 0.5, "High", 
+                       ifelse(h2_SNPs < 0.2, "Low", "Medium")),
+         CpG = cgid)
+
+herm <- methyAnnot %>%
+  select(CpG, Type, Direction) %>%
+  inner_join(h2df, by = "CpG") 
+
+herm %>%
+  ggplot(aes(x = Direction, y = h2_total)) + geom_boxplot() + 
+  geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
+  ggtitle("Total Heritability vs CpG direction") +
+  scale_x_discrete(name = "Association Direction", 
+                   limits = c("Negative", "Positive", "Both", "Non-significant")) +
+  scale_y_continuous(name = "h2", limits = c(0, 1)) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+herm$Direction <- factor(herm$Direction, levels = c("Non-significant", "Negative", "Positive", "Both"))
+                         
+summary(lm(h2_total ~ Direction , herm) )
+
+herm %>%
+  filter(Direction != "Non-significant") %>%
+  lm(formula = h2_total ~ Direction) %>% 
+  summary()
+```
+
+CpGs associated with gene expression are more heritable than CpGs not changing gene expression. Inside CpGs changing gene expression, those CpGs affecting gene expression in both directions are the most heritable and those changing negatively gene expression the least. 
+
+```{r}
+herm %>%
+  ggplot(aes(x = Direction, y = h2_SNPs)) + geom_boxplot() + 
+  geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
+  ggtitle("SNP Heritability vs CpG direction") +
+  scale_x_discrete(name = "Association Direction", 
+                   limits = c("Negative", "Positive", "Both", "Non-significant")) +
+  scale_y_continuous(name = "h2", limits = c(0, 1)) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+summary(lm(h2_SNPs ~ Direction , herm) )
+
+herm %>%
+  filter(Direction != "Non-significant") %>%
+  lm(formula = h2_SNPs ~ Direction) %>% 
+  summary()
+```
+
+When we consider SNPs heritability, we still see the same effect, although the heritability is decreased. With SNP heritability, CpGs affecting gene expression in both directions are more heritable than the other CpGs affecting gene expression. 
+
+### CpGs affected
+```{r}
+herm %>%
+  ggplot(aes(x = Type, y = h2_total)) + geom_boxplot() + 
+  geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
+  ggtitle("Total Heritability vs CpG direction") +
+  scale_x_discrete(name = "Association Direction", 
+                   limits = c("Mono", "Multi", "Non-significant")) +
+  scale_y_continuous(name = "h2", limits = c(0, 1)) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+herm$Type <- factor(herm$Type, levels = c("Non-significant", "Mono", "Multi"))
+                         
+summary(lm(h2_total ~ Type , herm) )
+
+herm %>%
+  filter(Type != "Non-significant") %>%
+  lm(formula = h2_total ~ Type) %>% 
+  summary()
+```
+
+CpGs associated with multiple genes are more heritable than CpGs changing only one gene. 
+
+```{r}
+herm %>%
+  ggplot(aes(x = Type, y = h2_SNPs)) + geom_boxplot() + 
+  geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
+  ggtitle("Total Heritability vs CpG direction") +
+  scale_x_discrete(name = "Association Direction", 
+                   limits = c("Mono", "Multi", "Non-significant")) +
+  scale_y_continuous(name = "h2", limits = c(0, 1)) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+summary(lm(h2_SNPs ~ Type , herm) )
+
+herm %>%
+  filter(Type != "Non-significant") %>%
+  lm(formula = h2_SNPs ~ Type) %>% 
+  summary()
+```
+
+When we use SNPs heritability, we have a higher effect.
+
+
+# Illumina annotation comparison
+
+In the following section, we will compare whether Illumina annotation can be used to predict the genes affected by a CpG. To do so, we will compare if the genes affected by the CpG are those to which the CpG is annotated in Illumina. Thus, we will restrict our comparison to those CpGs that are associated with gene expression and to those genes that are annotated with the same name in the Illumina and Affymetrix annotations.
+
+```{r}
+expAnnDF <- as_tibble(as.data.frame(expAnnot))
+expAnnDF$TC <- expAnnDF$transcript_cluster_id
+
+sigDF <- df %>%
+  as_tibble() %>%
+  filter(sigPair == TRUE) %>%
+  select(CpG, TC, FC) %>%
+  left_join(select(methyAnnot, CpG, UCSC_RefGene_Name, Type, Direction), by = "CpG") %>%
+  left_join(select(expAnnDF, TC, GeneSymbol_Affy), by = "TC")
+  
+methGenes <- unique(unlist(sigDF$UCSC_RefGene_Name))
+expGenes <- unique(unlist(strsplit(sigDF$GeneSymbol_Affy, ";")))
+comGenes <- intersect(methGenes, expGenes)
+
+methSel <- sapply(sigDF$UCSC_RefGene_Name, function(x) any(x %in% comGenes))
+expSel <- grepl(paste(comGenes, collapse = "|"), sigDF$GeneSymbol_Affy)
+
+sigDF2 <- sigDF[methSel & expSel, ]
+sigDF2
+```
+
+In total, we have `r nrow(sigDF2)` pairs where methylation is associated with gene expression and where the genes in Illumina are also present in the Affy annotation. These pairs contain `r length(unique(sigDF2$CpG))` unique CpGs and `r length(unique(sigDF2$TC))` unique TCs. These CpGs represent a `r round(length(unique(sigDF2$CpG))/length(unique(sigDF$CpG)), 2)*100)` % of CpGs associated with gene expression.
+
+
+```{r}
+sigDF2 <- sigDF2 %>%
+  mutate(match = sapply(1:nrow(sigDF2), function(i){
+   grepl(paste(sigDF2[i, "UCSC_RefGene_Name"][[1]][[1]], collapse = "|"), sigDF2[i, "GeneSymbol_Affy"])})) 
+
+sigDF2 %>%
+  group_by(Direction) %>%
+  summarise(prop = mean(match)) %>%
+  rbind(list("Total", mean(sigDF2$match))) %>%
+  ggplot(aes(x = Direction, y = prop*100)) + geom_bar(stat = "identity", fill = "white", color = "black") + 
+  scale_x_discrete(name = "Direction", limits = c("Negative", "Positive", "Both", "Total")) + 
+  scale_y_continuous(limits = c(0, 100), name = "Illumina Annotation Match") + theme_bw()
+```
+
+In 80% of the detected associations, Illumina annotation matched the gene from Affymetrix array. This proportion is lower for genes that affect gene expression in both directions, probably due to their pleiotropy.
+
+```{r}
+sigDF2 %>%
+  group_by(Type) %>%
+  summarise(prop = mean(match)) %>%
+  rbind(list("Total", mean(sigDF2$match))) %>%
+  ggplot(aes(x = Type, y = prop*100)) + geom_bar(stat = "identity", fill = "white", color = "black") + 
+  scale_x_discrete(name = "Type", limits = c("Mono", "Multi", "Total")) + 
+  scale_y_continuous(limits = c(0, 100), name = "Illumina Annotation Match") + theme_bw()
+
+sigDF2 %>%filter(Type == "Multi") %>%
+ group_by(CpG) %>%summarize(cot = sum(match) > 0) %>% ungroup() %>% summarize(mean(cot))
+
+```
+
+In CpGs affecting only one gene, Illumina annotation included the affected gene in almost all cases, while in CpGs affecting several genes, Illumina annotation missed some of the associations. Nonetheless, Illumina annotation can predict at least one of the genes affected in 92% of the multi CpGs.
