@@ -26,12 +26,15 @@ if (base == "cpgs"){
   stop("Base should be cpgs or genes")
 }
 
+load("results/preprocessFiles/allOverlaps.Rdata")
+overAll$pair <- paste0(overAll$CpG, overAll$TC)
 
 ## Load results
 files <- dir(resFolder, pattern = "outputchr", full.names = TRUE)
 resList <- lapply(files, function(x) read.table(gzfile(x), as.is = TRUE))
 df <- Reduce(rbind, resList)
 colnames(df) <- c("CpG", "TC", "FC", "SD", "p.value", "CI0.05", "CI0.95")
+df[paste0(df$CpG, df$TC) %in% overAll$pair, ]
 
 ## Compute p-value per feature
 if (base == "cpgs"){
