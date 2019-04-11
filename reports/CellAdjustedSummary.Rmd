@@ -1218,7 +1218,7 @@ sigDF2 <- sigDF[methSel & expSel, ]
 sigDF2
 ```
 
-In total, we have `r nrow(sigDF2)` pairs where methylation is associated with gene expression and where the genes in Illumina are also present in the Affy annotation. These pairs contain `r length(unique(sigDF2$CpG))` unique CpGs and `r length(unique(sigDF2$TC))` unique TCs. These CpGs represent a `r round(length(unique(sigDF2$CpG))/length(unique(sigDF$CpG)), 2)*100)` % of CpGs associated with gene expression.
+In total, we have `r nrow(sigDF2)` pairs where methylation is associated with gene expression and where the genes in Illumina are also present in the Affy annotation. These pairs contain `r length(unique(sigDF2$CpG))` unique CpGs and `r length(unique(sigDF2$TC))` unique TCs. These CpGs represent a `r round(length(unique(sigDF2$CpG))/length(unique(sigDF$CpG)), 2)*100` % of CpGs associated with gene expression.
 
 
 ```{r}
