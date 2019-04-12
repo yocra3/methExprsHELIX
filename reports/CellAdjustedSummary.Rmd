@@ -200,73 +200,88 @@ methyAnnot <- as_tibble(methyAnnot) %>%
   mutate(CpG = Name) %>%
   left_join(CpGsSum, by = "CpG")
 
-t <- table(factor(methyAnnot$assoc, levels = c("TRUE", "FALSE")), methyAnnot$GeneRel)
-t
-chisq.test(t)
+geneRelsum <- methyAnnot %>%
+  group_by(Type, Direction, GeneRel) %>%
+  summarise(n = n()) %>%
+  spread(GeneRel, n) %>%
+  mutate(Type0 = ifelse(Type == "Non-significant", "Non-significant", "Significant"))
 
-## OR
-or <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
+states <- c("Significant", "Negative", "Positive", "Both")
+
+
+## Define vars and function
+getOR <- function(val, df){
+  df <- df %>%
+    filter(Direction %in% c(val, "Non-significant")) %>%
+    group_by(Direction) %>%
+    select(3, 4) %>%
+    summarize_all(sum)
+  rownames(df) <- df$Direction
+  t <- data.matrix(df[c(val, "Non-significant"), c("Genic", "Intergenic")])
+  or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
+  p.val <- chisq.test(t)$p.value
+  c(OR = or, p.val = p.val)
+}
+
+makePlot <- function(y, title){
+   as_tibble(y) %>%
+  mutate(Estimate = c("OR", "p.value")) %>%
+  gather("Position", "Value", 1:length(states)) %>%
+  spread(Estimate, Value) %>%
+  mutate(p.val.thres = ifelse(p.value > 0.05, "P > 0.05", 
+                              ifelse(p.value < 1e-3, "P < 0.001", "P < 0.05"))) %>%
+  ggplot(aes(x = Position, y = OR, fill = p.val.thres)) + 
+  geom_bar(stat = "identity", colour = "black") + 
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "", 
+                   limits = states) +
+  scale_fill_manual(name = "", values = c("white", "grey70", "black")) +
+  ggtitle(title) +
+  theme_bw() + theme(plot.title = element_text(hjust = 0.5))
+}
+
+t <- geneRelsum %>%
+  group_by(Type0) %>%
+  select(3, 4) %>%
+  summarize_all(sum) %>%
+  arrange(desc(Type0)) %>%
+  select(2, 3)
+assOR <- c(OR = unlist(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), use.names = FALSE),
+           p.val = chisq.test(t)$p.value)
+
+cbind(Significant = assOR, sapply(states[-1], getOR, df = geneRelsum )) %>%
+  makePlot(title = "Distribution CpGs Associated vs Non-associated")
 ```
 
-CpGs associated with gene expression have an OR of `r or` of being more present in genic regions.
-
-### Positive vs negative
-```{r}
-tmp <- methyAnnot %>%
-  filter(!Direction %in% c("Non-significant", "Both")) 
-t <- table(tmp$Direction, tmp$GeneRel)
-t
-chisq.test(t)
-
-## OR
-or <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
-```
-
-CpGs negatively associated with gene expression have an OR of `r or` of being more present in genic regions than CpGs associated negatively.
-
-### Positive vs both
-```{r}
-tmp <- methyAnnot %>%
-  filter(!Direction %in% c("Non-significant", "Negative")) 
-t <- table(tmp$Direction, tmp$GeneRel)
-t
-chisq.test(t)
-
-## OR
-or <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
-```
-
-
-CpGs positively associated with gene expression have a similar probality of being more present in genic regions than CpGs associated positively and negatively (OR: `r or`).
-
-### Negative vs both
-```{r}
-tmp <- methyAnnot %>%
-  filter(!Direction %in% c("Non-significant", "Positive")) 
-t <- table(factor(tmp$Direction, levels = c("Negative", "Both")), tmp$GeneRel)
-t
-chisq.test(t)
-
-## OR
-or <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
-```
-
-CpGs negatively associated with gene expression are more likely to be present in genic regions than CpGs associated positively and negatively (OR: `r or`).
+CpGs associated with expression are more frequent in genes. Nonetheless, this effect is restricted to CpGs associated negatively with gene expression. For the other CpGs, we do not observe more CpGs in genic regions. 
 
 ### Mono vs multi
 
 ```{r}
-t <- table(methyAnnot$Type, methyAnnot$GeneRel)
-t
-chisq.test(t)
+states <- c("Significant", "Mono", "Multi")
 
-## OR
-orMoMu <- round(t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1]), 2)
-orMoAll <- round(t[1, 1]*t[3, 2]/(t[1, 2]*t[3, 1]), 2)
-orMuAll <- round(t[2, 1]*t[3, 2]/(t[2, 2]*t[3, 1]), 2)
+## Define vars and function
+getOR <- function(val, df){
+  df <- df %>%
+    filter(Type %in% c(val, "Non-significant")) %>%
+    group_by(Type) %>%
+    select(3, 4) %>%
+    summarize_all(sum)
+  rownames(df) <- df$Type
+  t <- data.matrix(df[c(val, "Non-significant"), c("Genic", "Intergenic")])
+  or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
+  p.val <- chisq.test(t)$p.value
+  c(OR = or, p.val = p.val)
+}
+
+cbind(Significant = assOR, sapply(states[-1], getOR, df = geneRelsum )) %>%
+  makePlot(title = "Distribution CpGs Associated vs Non-associated")
+
 ```
 
-CpGs that change expression of one gene, are more likely to be in the genic region than CpGs affecting expression of several genes (OR: `r orMoMu`) or than CpGs not-affecting gene expression (OR: `r orMoAll`). CpGs affecting the expression of multiple TCs are less likely to be in genic regions (OR: `r orMuAll`).
+When we analyse CpGs by the number of genes they change, we observe that CpGs that change one gene are more frequent than expected in genic regions, while CpGs affecting several genes are more frequent in intergenic regions. 
 
 ## Relation to CpG Island
 
@@ -317,7 +332,6 @@ tmp <- islSum %>%
   select(-c(1:2)) %>%
   summarize_all(list(sum)) %>%
   arrange(desc(Type0))
-
 
 sapply(islandStates, function(x) getOR(x, tmp)) %>%
   makePlot(title = "Distribution CpGs Associated vs Non-associated")
@@ -502,7 +516,6 @@ tmp <- posSum %>%
   select(ends_with("in"), ends_with("ou")) %>%
   summarize_all(list(sum)) %>%
   arrange(desc(Type0))
-
 
 sapply(gpos, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
   makePlot(title = "Distribution CpGs Associated vs Non-associated")
@@ -882,7 +895,68 @@ plot_grid(p1, p2, p3, nrow = 3)
 
 CpGs associated with gene expression are more frequent in the same states, independent of the number of TCs they are associated with. The main differences that we observed were that CpGs that are associated with different TCs tend to be more frequent in ZNF regions and in bivalent regulatory states. 
 
-## Age 
+# Illumina annotation comparison
+
+In the following section, we will compare whether Illumina annotation can be used to predict the genes affected by a CpG. To do so, we will compare if the genes affected by the CpG are those to which the CpG is annotated in Illumina. Thus, we will restrict our comparison to those CpGs that are associated with gene expression and to those genes that are annotated with the same name in the Illumina and Affymetrix annotations.
+
+```{r}
+expAnnDF <- as_tibble(as.data.frame(expAnnot))
+expAnnDF$TC <- expAnnDF$transcript_cluster_id
+
+sigDF <- df %>%
+  as_tibble() %>%
+  filter(sigPair == TRUE) %>%
+  select(CpG, TC, FC) %>%
+  left_join(select(methyAnnot, CpG, UCSC_RefGene_Name, Type, Direction), by = "CpG") %>%
+  left_join(select(expAnnDF, TC, GeneSymbol_Affy), by = "TC")
+  
+methGenes <- unique(unlist(sigDF$UCSC_RefGene_Name))
+expGenes <- unique(unlist(strsplit(sigDF$GeneSymbol_Affy, ";")))
+comGenes <- intersect(methGenes, expGenes)
+
+methSel <- sapply(sigDF$UCSC_RefGene_Name, function(x) any(x %in% comGenes))
+expSel <- grepl(paste(comGenes, collapse = "|"), sigDF$GeneSymbol_Affy)
+
+sigDF2 <- sigDF[methSel & expSel, ]
+sigDF2
+```
+
+In total, we have `r nrow(sigDF2)` pairs where methylation is associated with gene expression and where the genes in Illumina are also present in the Affy annotation. These pairs contain `r length(unique(sigDF2$CpG))` unique CpGs and `r length(unique(sigDF2$TC))` unique TCs. These CpGs represent a `r round(length(unique(sigDF2$CpG))/length(unique(sigDF$CpG)), 2)*100` % of CpGs associated with gene expression.
+
+
+```{r}
+sigDF2 <- sigDF2 %>%
+  mutate(match = sapply(1:nrow(sigDF2), function(i){
+   grepl(paste(sigDF2[i, "UCSC_RefGene_Name"][[1]][[1]], collapse = "|"), sigDF2[i, "GeneSymbol_Affy"])})) 
+
+sigDF2 %>%
+  group_by(Direction) %>%
+  summarise(prop = mean(match)) %>%
+  rbind(list("Total", mean(sigDF2$match))) %>%
+  ggplot(aes(x = Direction, y = prop*100)) + geom_bar(stat = "identity", fill = "white", color = "black") + 
+  scale_x_discrete(name = "Direction", limits = c("Negative", "Positive", "Both", "Total")) + 
+  scale_y_continuous(limits = c(0, 100), name = "Illumina Annotation Match") + theme_bw()
+```
+
+In 80% of the detected associations, Illumina annotation matched the gene from Affymetrix array. This proportion is lower for genes that affect gene expression in both directions, probably due to their pleiotropy.
+
+```{r}
+sigDF2 %>%
+  group_by(Type) %>%
+  summarise(prop = mean(match)) %>%
+  rbind(list("Total", mean(sigDF2$match))) %>%
+  ggplot(aes(x = Type, y = prop*100)) + geom_bar(stat = "identity", fill = "white", color = "black") + 
+  scale_x_discrete(name = "Type", limits = c("Mono", "Multi", "Total")) + 
+  scale_y_continuous(limits = c(0, 100), name = "Illumina Annotation Match") + theme_bw()
+
+sigDF2 %>%filter(Type == "Multi") %>%
+ group_by(CpG) %>%summarize(cot = sum(match) > 0) %>% ungroup() %>% summarize(mean(cot))
+
+```
+
+In CpGs affecting only one gene, Illumina annotation included the affected gene in almost all cases, while in CpGs affecting several genes, Illumina annotation missed some of the associations. Nonetheless, Illumina annotation can predict at least one of the genes affected in 92% of the multi CpGs.
+
+# Age 
 
 Next, we tested whether CpGs associated with gene expression also changed their methylation because of age (data from: https://www.ncbi.nlm.nih.gov/pubmed/28056824)
 
@@ -897,7 +971,7 @@ agedf <- agedf %>%
 
 ageSum <- methyAnnot %>%
   select(CpG, Type, Direction) %>%
-  left_join(agedf, by = "CpG") %>%
+  left_join(select(agedf, Dir, CpG), by = "CpG") %>%
   mutate(Dir = ifelse(is.na(Dir), "Constant", Dir)) %>%
   group_by(Type, Direction, Dir) %>%
   summarize(n = n()) %>%
@@ -1029,6 +1103,66 @@ plot_grid(pNP, pNB, pPB, nrow = 3)
 
 We observe the same effect previously described: negative CpGs tend to decrease their methylation during childhood more than positive CpGs. 
 
+
+Next, we evaluated whether the genes regulated by these CpGs are enriched in some processes. We tested the genes that are associated with CpGs that decrease their expression during chilhood and regulate negatively expression and the genes that are associated with CpGs that increase their expression during childhood and regulate positively expression. 
+
+```{r}
+neg <- methyAnnot %>%
+  select(CpG, Type, Direction) %>%
+  left_join(select(agedf, Dir, CpG), by = "CpG") %>%
+  filter(Direction == "Negative" & Dir == "Decreasing") %>%
+  semi_join(df, ., by = "CpG") %>%
+  as_tibble() %>%
+  filter(sigPair == TRUE) %>%
+  left_join(select(expAnnDF, TC, GeneSymbol_Affy), by = "TC")
+
+pos <- methyAnnot %>%
+  select(CpG, Type, Direction) %>%
+  left_join(select(agedf, Dir, CpG), by = "CpG") %>%
+  filter(Direction == "Positive" & Dir == "Increasing") %>%
+  semi_join(df, ., by = "CpG") %>%
+  as_tibble() %>%
+  filter(sigPair == TRUE) %>%
+  left_join(select(expAnnDF, TC, GeneSymbol_Affy), by = "TC")
+
+library(clusterProfiler)
+library(org.Hs.eg.db)
+
+allGenes <- expAnnDF %>%
+  inner_join(df, by = "TC") %>%
+  `$`("GeneSymbol_Affy") %>%
+  strsplit(., split = ";") %>%
+  unlist() %>%
+  unique()
+allGenesENT <- bitr(allGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
+negGenes <- unique(unlist(strsplit(neg$GeneSymbol_Affy, ";")))
+negGenesENT <-  bitr(negGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
+posGenes <- unique(unlist(strsplit(pos$GeneSymbol_Affy, ";")))
+posGenesENT <-  bitr(posGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
+
+
+go <- compareCluster(geneCluster = list(neg = negGenesENT$ENTREZID, 
+                                        pos = posGenesENT$ENTREZID, 
+                                        both = c(negGenesENT$ENTREZID, posGenesENT$ENTREZID)), 
+                     fun = "enrichGO", universe = allGenesENT$ENTREZID, 
+                     ont = "BP",
+                    OrgDb = org.Hs.eg.db)
+
+dotplot(go)
+
+kegg <- compareCluster(geneCluster = list(neg = negGenesENT$ENTREZID, 
+                                        pos = posGenesENT$ENTREZID, 
+                                        both = c(negGenesENT$ENTREZID, posGenesENT$ENTREZID)), 
+                     fun = "enrichKEGG",
+                     universe = allGenesENT$ENTREZID, 
+                     organism = "hsa")
+dotplot(kegg)
+
+```
+
+Processes and pathways associated with these genes are enriched in pathways associated with immunitary processes, which might reflect the maturation of immunitary system. 
+
+
 ### Mono vs Multi vs Non-significant
 ```{r}
 scale <- scale_y_continuous(trans = "log2", 
@@ -1069,7 +1203,7 @@ plot_grid(p1, p2, p3, nrow = 3)
 When comparing CpGs by the number of TCs they change, we do not observe any differences. 
 
 
-## Heritability 
+# Heritability 
 
 Next, we tested whether CpGs associated with gene expression are heritable (data from: https://www.nature.com/articles/ncomms11115). Use criteria from paper: 
 
@@ -1191,70 +1325,6 @@ herm %>%
 
 When we use SNPs heritability, we have a higher effect.
 
-
-# Illumina annotation comparison
-
-In the following section, we will compare whether Illumina annotation can be used to predict the genes affected by a CpG. To do so, we will compare if the genes affected by the CpG are those to which the CpG is annotated in Illumina. Thus, we will restrict our comparison to those CpGs that are associated with gene expression and to those genes that are annotated with the same name in the Illumina and Affymetrix annotations.
-
-```{r}
-expAnnDF <- as_tibble(as.data.frame(expAnnot))
-expAnnDF$TC <- expAnnDF$transcript_cluster_id
-
-sigDF <- df %>%
-  as_tibble() %>%
-  filter(sigPair == TRUE) %>%
-  select(CpG, TC, FC) %>%
-  left_join(select(methyAnnot, CpG, UCSC_RefGene_Name, Type, Direction), by = "CpG") %>%
-  left_join(select(expAnnDF, TC, GeneSymbol_Affy), by = "TC")
-  
-methGenes <- unique(unlist(sigDF$UCSC_RefGene_Name))
-expGenes <- unique(unlist(strsplit(sigDF$GeneSymbol_Affy, ";")))
-comGenes <- intersect(methGenes, expGenes)
-
-methSel <- sapply(sigDF$UCSC_RefGene_Name, function(x) any(x %in% comGenes))
-expSel <- grepl(paste(comGenes, collapse = "|"), sigDF$GeneSymbol_Affy)
-
-sigDF2 <- sigDF[methSel & expSel, ]
-sigDF2
-```
-
-In total, we have `r nrow(sigDF2)` pairs where methylation is associated with gene expression and where the genes in Illumina are also present in the Affy annotation. These pairs contain `r length(unique(sigDF2$CpG))` unique CpGs and `r length(unique(sigDF2$TC))` unique TCs. These CpGs represent a `r round(length(unique(sigDF2$CpG))/length(unique(sigDF$CpG)), 2)*100` % of CpGs associated with gene expression.
-
-
-```{r}
-sigDF2 <- sigDF2 %>%
-  mutate(match = sapply(1:nrow(sigDF2), function(i){
-   grepl(paste(sigDF2[i, "UCSC_RefGene_Name"][[1]][[1]], collapse = "|"), sigDF2[i, "GeneSymbol_Affy"])})) 
-
-sigDF2 %>%
-  group_by(Direction) %>%
-  summarise(prop = mean(match)) %>%
-  rbind(list("Total", mean(sigDF2$match))) %>%
-  ggplot(aes(x = Direction, y = prop*100)) + geom_bar(stat = "identity", fill = "white", color = "black") + 
-  scale_x_discrete(name = "Direction", limits = c("Negative", "Positive", "Both", "Total")) + 
-  scale_y_continuous(limits = c(0, 100), name = "Illumina Annotation Match") + theme_bw()
-```
-
-In 80% of the detected associations, Illumina annotation matched the gene from Affymetrix array. This proportion is lower for genes that affect gene expression in both directions, probably due to their pleiotropy.
-
-```{r}
-sigDF2 %>%
-  group_by(Type) %>%
-  summarise(prop = mean(match)) %>%
-  rbind(list("Total", mean(sigDF2$match))) %>%
-  ggplot(aes(x = Type, y = prop*100)) + geom_bar(stat = "identity", fill = "white", color = "black") + 
-  scale_x_discrete(name = "Type", limits = c("Mono", "Multi", "Total")) + 
-  scale_y_continuous(limits = c(0, 100), name = "Illumina Annotation Match") + theme_bw()
-
-sigDF2 %>%filter(Type == "Multi") %>%
- group_by(CpG) %>%summarize(cot = sum(match) > 0) %>% ungroup() %>% summarize(mean(cot))
-
-```
-
-In CpGs affecting only one gene, Illumina annotation included the affected gene in almost all cases, while in CpGs affecting several genes, Illumina annotation missed some of the associations. Nonetheless, Illumina annotation can predict at least one of the genes affected in 92% of the multi CpGs.
-
-
-
 # EWAS catalogue 
 
 Next, we tested whether CpGs associated with gene expression are also associated with diseases or exposures in EWAS catalogue (data from: http://www.ewascatalog.org/)
@@ -1313,7 +1383,6 @@ tmp <- ewasSum %>%
   select(ends_with("in"), ends_with("ou")) %>%
   summarize_all(list(sum)) %>%
   arrange(desc(Type0))
-
 
 sapply(eff, function(x) getOR(paste0(x, c("in", "ou")), tmp)) %>%
   makePlot(title = "Distribution CpGs Associated vs Non-associated")
