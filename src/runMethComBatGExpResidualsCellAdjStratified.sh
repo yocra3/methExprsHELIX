@@ -27,6 +27,7 @@ femaleFolder="$resFolder/female"
 
 ## Generate beta dsitributions per CpG
 Rscript src/getBetaDistributionsCpGs.R folder="'$femaleFolder'" type="'female'"
+Rscript src/getSignificantPairs.R resFolder="'$femaleFolder'" base="'cpgs'" distribution="'$femaleFolder/CpGsDistr.Rdata'"
 
 ## Generate beta dsitributions per gene
 Rscript src/getBetaDistributionsGenes.R folder="'$femaleFolder'" type="'female'"
