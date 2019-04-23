@@ -104,12 +104,24 @@ CpGs tend to be associated with expression of close TCs. We do not observe diffe
 ### Positive vs negative
 
 ```{r}
+quantiles <- df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
+  group_by(class) %>%
+  summarize(q05 = quantile(Distance, 0.05),
+            q17 = quantile(Distance, 0.17),
+            q93 = quantile(Distance, 0.83),
+            q95 = quantile(Distance, 0.95)) %>%
+  gather("Q", "cut", 2:5) %>%
+  mutate(Interval = ifelse(Q %in% c("q05", "q95"), "90%", "66%"))
+
 pA <- df_comp %>% 
   filter(sigPair == TRUE) %>%
   mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
   ggplot(aes(x = Distance, color = class)) + geom_density() + 
   theme_bw() + 
-  scale_color_discrete(name = "")
+  scale_color_discrete(name = "") +
+  geom_vline(data = quantiles, aes(xintercept = cut, color = class, linetype = Interval))
 
 pB <- df_comp %>% 
   filter(sigPair == TRUE) %>%
@@ -125,7 +137,6 @@ df_comp %>%
   filter(sigPair == TRUE) %>%
   mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
   lm(formula = abs(Distance) ~ class) %>% summary
-
 ```
 
 CpGs associated negatively to TCs are on average 14Kb closer to the TSS than CpGs associated positively. 
@@ -133,12 +144,24 @@ CpGs associated negatively to TCs are on average 14Kb closer to the TSS than CpG
 ### Mono vs Multi
 
 ```{r}
+quantiles <- df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(class = ifelse(CpG %in% CpGs1, "Mono", "Multi")) %>%
+  group_by(class) %>%
+  summarize(q05 = quantile(Distance, 0.05),
+            q17 = quantile(Distance, 0.17),
+            q93 = quantile(Distance, 0.83),
+            q95 = quantile(Distance, 0.95)) %>%
+  gather("Q", "cut", 2:5) %>%
+  mutate(Interval = ifelse(Q %in% c("q05", "q95"), "90%", "66%"))
+
 pA <- df_comp %>% 
   filter(sigPair == TRUE) %>%
   mutate(class = ifelse(CpG %in% CpGs1, "Mono", "Multi")) %>%
   ggplot(aes(x = Distance, color = class)) + geom_density() + 
   theme_bw() + 
-  scale_color_discrete(name = "")
+  scale_color_discrete(name = "") +
+  geom_vline(data = quantiles, aes(xintercept = cut, color = class, linetype = Interval))
 
 pB <- df_comp %>% 
   filter(sigPair == TRUE) %>%
@@ -180,6 +203,86 @@ df_comp %>%
 ```
 
 When evaluting both factors at the same time, we get the same conclussions: CpGs inversely associated with gene expression that only change expression of one gene are closer to the TC than CpGs changing positively gene expression in more than one gene. 
+
+
+# Effect size
+
+### Effect size vs distance
+
+```{r}
+df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  ggplot(aes(x = abs(Distance), y = FC)) + geom_point() + 
+  theme_bw() + 
+  scale_color_discrete(name = "")
+
+df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  lm(formula = (abs(FC)) ~ (abs(Distance))) %>% summary
+
+```
+
+CpGs that affect more strongly gene expression tend to be slightly more closer to the TC.
+
+
+### Positive vs negative
+
+```{r}
+df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
+  ggplot(aes(x = log10(abs(FC)), color = class)) + geom_density() + 
+  theme_bw() + 
+  scale_color_discrete(name = "")
+
+df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
+  lm(formula = log10(abs(FC)) ~ class) %>% summary
+
+```
+
+CpGs associated negatively to TCs produce higher effects on gene expression than CpGs associated positively, though the association is weak. 
+
+### Mono vs Multi
+
+```{r}
+df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(class = ifelse(CpG %in% CpGs1, "Mono", "Multi")) %>%
+  ggplot(aes(x = log10(abs(FC)), color = class)) + geom_density() + 
+  theme_bw() + 
+  scale_color_discrete(name = "")
+
+df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(class = ifelse(CpG %in% CpGs1, "Mono", "Multi")) %>%
+  lm(formula = (abs(FC)) ~ class) %>% summary
+```
+
+CpGs associated to more than one TC are more strongly associated with gene expression than CpGs associated with several TCs.
+
+### Both factors
+
+```{r}
+df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(CpGclass = ifelse(CpG %in% CpGs1, "Mono", "Multi"), 
+         AssocClass = ifelse(CpG %in% posNeg, "Both",
+                             ifelse(FC > 0, "Positive", "Negative"))) %>%
+  ggplot(aes(x = log10(abs(FC)), color = AssocClass)) + geom_density() + 
+  theme_bw() + facet_wrap(~CpGclass) + 
+  scale_color_discrete(name = "")
+
+df_comp %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(CpGclass = ifelse(CpG %in% CpGs1, "Mono", "Multi"), 
+         AssocClass = ifelse(CpG %in% posNeg, "Both",
+                             ifelse(FC > 0, "Positive", "Negative"))) %>%
+  lm(formula = log10(abs(FC)) ~ CpGclass + AssocClass) %>% anova
+```
+
+When evaluting both factors at the same time, we get the same conclussions: CpGs inversely associated with gene expression and with different TCs have stronger effects on gene expression. 
 
 # CpGs Enrichment
 
