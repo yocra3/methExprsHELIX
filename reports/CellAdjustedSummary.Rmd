@@ -20,6 +20,8 @@ knitr::opts_knit$set(root.dir = "../")
 In this report, we discuss the results of the association of methylation vs gene expression in the subcohort data of HELIX project. The results of this report were obtained by running a model adjusted for cell counts and only including autosome chromosomes.
 
 ```{r}
+library(org.Hs.eg.db)
+library(clusterProfiler)
 library(ggplot2)
 library(dplyr)
 library(cowplot)
@@ -1227,9 +1229,6 @@ pos <- methyAnnot %>%
   as_tibble() %>%
   filter(sigPair == TRUE) %>%
   left_join(select(expAnnDF, TC, GeneSymbol_Affy), by = "TC")
-
-library(clusterProfiler)
-library(org.Hs.eg.db)
 
 allGenes <- expAnnDF %>%
   inner_join(df, by = "TC") %>%
