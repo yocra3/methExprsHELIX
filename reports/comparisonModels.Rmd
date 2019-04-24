@@ -1,0 +1,105 @@
+---
+title: "Comparison methExprs models"
+author: "Carlos Ruiz"
+date: "`r Sys.Date()`"
+output:
+    BiocStyle::html_document:
+      toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, fig.wide = TRUE)
+knitr::opts_knit$set(root.dir = "../")
+```
+
+
+```{r load}
+library(dplyr)
+library(ggplot2)
+
+load("results/MethComBatExpResidualsNoCellAdj/allres_simP_cpgs.Rdata")
+modU <- df
+featsU <- featStatsDF
+
+load("results/MethComBatExpResidualsCellAdj/allres_simP_cpgs.Rdata")
+modC <- df
+featsC <- featStatsDF
+
+```
+
+We fit two models. The difference is whether we included cell composition in the models:
+- Model U: model adjusted for sex, cohort and age
+- Model C: model adjusted for sex, cohort, age and cell composition.
+
+# Compare CpGs
+
+```{r}
+sigFU <- subset(featsU, p.val.adj < 0.05)$feat
+sigFC <- subset(featsC, p.val.adj < 0.05)$feat
+sigCom <- intersect(sigFU, sigFC)
+```
+
+We found `r length(sigFU)` CpGs affecting gene expression with model U and `r length(sigFC)` with model C. Of those, `r length(sigCom)`, were found with both models. Thus, we had higher power to detect associations with model C. 
+
+# Compare pairs
+
+## Merge datasets
+
+We will create a merged dataset with the estimates for both models. We will restrict the comparison to those CpG-TC pairs found significant in at least one of the models. 
+
+```{r}
+mergeTB <- modU %>%
+  left_join(modC, by = c("CpG", "TC")) %>%
+  as_tibble() %>%
+  filter(sigPair.x == TRUE | sigPair.y == TRUE) %>%
+  mutate(sigType = ifelse(sigPair.x == TRUE, ifelse(sigPair.y == TRUE, "Both", "Crude"), "Cell"))
+```
+
+In total, `r nrow(mergeTB)` CpG-TC pairs were found significant with at least any of the models. Of those, `r sum(mergeTB$sigType == "Both")` pairs were found with both models, `r sum(mergeTB$sigType == "Cell")` pairs only with the model adjusted for cell counts and `sum(mergeTB$sigType == "Crude")` pairs only with the model not-adjusted for cell counts. 
+
+
+## Compare p-values
+```{r}
+ggplot(mergeTB, aes(x = -log10(p.value.y), y = -log10(p.value.x), col = sigType)) +
+  geom_point() +
+  scale_x_continuous(name = "Cell adjusted") + 
+  scale_y_continuous("Not cell adjusted") + 
+  ggtitle("-log10 p-values comparative") +
+  theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
+  scale_color_discrete(name = "")
+```
+
+We observe some CpG-TC pairs that are only significant when we adjust for cell counts. 
+
+```{r}
+par(mfrow = c(1, 2))
+hist(modU$p.value, main = "Model U", xlab = "Raw p-values")
+hist(modC$p.value, main = "Model C", xlab = "Raw p-values")
+```
+
+In model U histogram, we observe an excess of pairs having p-values close to 1 which we do not observe for model C. This fact is suggesting a deflation in p-values and low power to detect associations, which explains the lower number of associations found. 
+
+## Compare Estimates
+
+Use this formula to estimate p-value of difference
+
+https://stats.stackexchange.com/questions/55501/test-a-significant-difference-between-two-slope-values
+
+
+```{r}
+mergeTB <- mergeTB %>%
+  mutate(Diff.pval = pnorm(abs(FC.x - FC.y)/sqrt(SD.x**2 + SD.y**2), lower.tail = FALSE), 
+         isDiff = ifelse(Diff.pval < 0.05, "Different", "Equal"))
+
+table(Different = mergeTB$isDiff, type = mergeTB$sigType)
+
+ggplot(mergeTB, aes(x = FC.y, y = FC.x, col = sigType)) +
+  geom_point() +
+  scale_x_continuous(name = "Cell adjusted") + 
+  scale_y_continuous("Not cell adjusted") + 
+  ggtitle("Estimates comparative") +
+  theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
+  scale_color_discrete(name = "")
+```
+
+Half of the pairs significant after adjusting for cell counts have different estimates between the models, while any of the pairs significant only in the crude model has a different estimate in the cell adjusted model. 
