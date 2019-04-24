@@ -34,7 +34,7 @@ We fit two models. The difference is whether we included cell composition in the
 
 # Compare CpGs
 
-```{r}
+```{r, dev='Cairo_png'}
 sigFU <- subset(featsU, p.val.adj < 0.05)$feat
 sigFC <- subset(featsC, p.val.adj < 0.05)$feat
 sigCom <- intersect(sigFU, sigFC)

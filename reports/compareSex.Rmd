@@ -43,7 +43,7 @@ We run the analysis including all samples and stratifying in boys and girls.
 
 # Compare CpGs
 
-```{r}
+```{r, dev='Cairo_png'}
 sigFA <- subset(featsAll, p.val.adj < 0.05)$feat
 sigFM <- subset(featsM, p.val.adj < 0.05)$feat
 sigFF <- subset(featsF, p.val.adj < 0.05)$feat
