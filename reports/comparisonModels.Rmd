@@ -16,6 +16,7 @@ knitr::opts_knit$set(root.dir = "../")
 ```{r load}
 library(dplyr)
 library(ggplot2)
+library(VennDiagram)
 
 load("results/MethComBatExpResidualsNoCellAdj/allres_simP_cpgs.Rdata")
 modU <- df
@@ -37,6 +38,12 @@ We fit two models. The difference is whether we included cell composition in the
 sigFU <- subset(featsU, p.val.adj < 0.05)$feat
 sigFC <- subset(featsC, p.val.adj < 0.05)$feat
 sigCom <- intersect(sigFU, sigFC)
+
+
+grid.newpage()
+draw.pairwise.venn(length(sigFU), length(sigFC),length(sigCom), 
+                 category = c("Adjusted", "Adjusted + Cells"), lty = "blank")
+
 ```
 
 We found `r length(sigFU)` CpGs affecting gene expression with model U and `r length(sigFC)` with model C. Of those, `r length(sigCom)`, were found with both models. Thus, we had higher power to detect associations with model C. 
@@ -55,7 +62,7 @@ mergeTB <- modU %>%
   mutate(sigType = ifelse(sigPair.x == TRUE, ifelse(sigPair.y == TRUE, "Both", "Crude"), "Cell"))
 ```
 
-In total, `r nrow(mergeTB)` CpG-TC pairs were found significant with at least any of the models. Of those, `r sum(mergeTB$sigType == "Both")` pairs were found with both models, `r sum(mergeTB$sigType == "Cell")` pairs only with the model adjusted for cell counts and `sum(mergeTB$sigType == "Crude")` pairs only with the model not-adjusted for cell counts. 
+In total, `r nrow(mergeTB)` CpG-TC pairs were found significant with at least any of the models. Of those, `r sum(mergeTB$sigType == "Both")` pairs were found with both models, `r sum(mergeTB$sigType == "Cell")` pairs only with the model adjusted for cell counts and `r sum(mergeTB$sigType == "Crude")` pairs only with the model not-adjusted for cell counts. 
 
 
 ## Compare p-values

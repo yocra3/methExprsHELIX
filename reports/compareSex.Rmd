@@ -1,0 +1,363 @@
+---
+title: "Comparison both and girls"
+author: "Carlos Ruiz"
+date: "`r Sys.Date()`"
+output:
+    BiocStyle::html_document:
+      toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, fig.wide = TRUE)
+knitr::opts_knit$set(root.dir = "../")
+```
+
+
+```{r load}
+library(org.Hs.eg.db)
+library(clusterProfiler)
+library(dplyr)
+library(ggplot2)
+library(VennDiagram)
+
+## Annotation
+load("results/preprocessFiles/methyAnnotation.Rdata")
+load("results/preprocessFiles/gexpAnnotation.Rdata")
+
+## Results
+load("results/MethComBatExpResidualsCellAdj/allres_simP_cpgs.Rdata")
+all <- df
+featsAll <- featStatsDF
+
+
+load("results/MethComBatExpResidualsCellAdjStrat/female/allres_simP_cpgs.Rdata")
+fem <- df
+featsF <- featStatsDF
+
+load("results/MethComBatExpResidualsCellAdjStrat/male/allres_simP_cpgs.Rdata")
+mal <- df
+featsM <- featStatsDF
+```
+
+We run the analysis including all samples and stratifying in boys and girls. 
+
+# Compare CpGs
+
+```{r}
+sigFA <- subset(featsAll, p.val.adj < 0.05)$feat
+sigFM <- subset(featsM, p.val.adj < 0.05)$feat
+sigFF <- subset(featsF, p.val.adj < 0.05)$feat
+
+grid.newpage()
+draw.triple.venn(area1 = length(sigFA), area2 = length(sigFM), area3 = length(sigFF), 
+                 n12 = length(intersect(sigFA, sigFM)), 
+                 n23 = length(intersect(sigFM, sigFF)), 
+                 n13 = length(intersect(sigFA, sigFF)), 
+                 n123 = length(intersect(intersect(sigFA, sigFM), sigFF)), 
+                 category = c("All Samples", "Boys", "Girls"), lty = "blank")
+
+allSig
+```
+
+As expected, we detect more CpGs affecting gene expression when we include all individuals. Nonetheless, almost half of these CpGs are also found when only including boys or girls. Only `r length(intersect(sigFM, sigFF))` CpGs were found to change gene expression in the stratified analyses but not in the overall. These CpGs are likely to be placed in chromosome X, which were not analyzed in the overall analysis. This low number suggests that regulation in chromosome X is different between boys and girls. Finally, although the number of girls and boys was very similar, boys had almost three times more CpGs affecting gene expression than girls.
+
+(Comparació CpGs diferents nens i nenes de PACE???)
+
+# Compare Pairs
+
+## Merge datasets
+
+We will create a merged dataset with the estimates for the three groups. We will restrict the comparison to those CpG-TC pairs found significant in at least one of the groups. 
+
+```{r}
+mergeAll <- all %>%
+  select(-starts_with("CI")) %>%
+  full_join(select(fem, -starts_with("CI")), by = c("CpG", "TC")) %>%
+  full_join(select(mal, -starts_with("CI")), by = c("CpG", "TC")) %>%
+  as_tibble() %>%
+  filter(sigPair.x == TRUE | sigPair.y == TRUE | sigPair == TRUE) 
+
+```
+
+In total, `r nrow(mergeAll)` CpG-TC pairs were found significant with at least any of the groups. 
+
+Next, we computed whether the estimates obtained with the different groups are different (based on https://stats.stackexchange.com/questions/55501/test-a-significant-difference-between-two-slope-values)
+
+
+```{r}
+mergeAll <- mergeAll %>%
+  mutate(Diff.pval.fem = pnorm(abs(FC.x - FC.y)/sqrt(SD.x**2 + SD.y**2), lower.tail = FALSE), Diff.pval.mal = pnorm(abs(FC.x - FC)/sqrt(SD.x**2 + SD**2), lower.tail = FALSE), 
+         Diff.pval.fem.mal = pnorm(abs(FC - FC.y)/sqrt(SD**2 + SD.y**2), lower.tail = FALSE),
+         Sig = ifelse(sigPair.y == TRUE, ifelse(sigPair == TRUE, "Both", "Girls"), 
+                      ifelse(sigPair == TRUE, "Boys", "None")))
+
+```
+
+First, we will study those pairs that have different effect estimates in girls and boys.
+
+```{r}
+diffPairs <- mergeAll %>%
+  filter(Diff.pval.fem.mal < 0.05) %>%
+  mutate(Type = ifelse(abs(FC.y) > abs(FC), "female", "male"))
+```
+
+In `r nrow(diffPairs)` CpG-TC pairs, the effect of methylation in gene expression was different between girls and boys. In `r sum(diffPairs$Type == "female")` pairs, the CpG had a stronger effect on gene expression in girls while in `r sum(diffPairs$Type == "male")` pairs, the effect was stronger in boys. 
+
+## Compare p-values
+
+First, we compared the p-values obtained after including only boys or only girls of those CpG-TC pairs found as significant in any of the three groups.
+
+```{r}
+ggplot(mergeAll, aes(x = -log10(p.value.y), y = -log10(p.value), color = Sig)) +
+  geom_point() +
+  scale_x_continuous(name = "Females") + 
+  scale_y_continuous("Males") + 
+  ggtitle("-log10 p-values comparative") +
+  theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
+  scale_color_discrete(name = "") +
+  geom_abline(intercept = 0, slope = 1,  linetype = "dashed")
+```
+
+In general, we obtained smaller p-values including the boys than with the girls. In total, `r nrow(mergeAll)` CpG-TC pairs were found as significant in any of the groups. Of those, `r sum(mergeAll$Sig == "Both")` pairs were significant in the three groups, `r sum(mergeAll$Sig == "Boys")` were found only significant in boys and `r sum(mergeAll$Sig == "Girls")` only in girls. 
+
+Next, we restricted the comparison to those CpG-TC pairs having different FC in boys and girls: 
+
+```{r}
+diffPairs <- diffPairs %>%
+  mutate(q = -log10(diffPairs$p.value.y)/-log10(diffPairs$p.value),
+         Sig2 = ifelse(q < 0.2 & Sig != "None", "Boys Only", 
+                       ifelse(q > 5 & Sig != "None", "Girls Only", Sig)))
+
+ggplot(diffPairs, aes(x = -log10(p.value.y), y = -log10(p.value), col = Sig2)) +
+  geom_point() +
+  scale_x_continuous(name = "Females") + 
+  scale_y_continuous("Males") + 
+  ggtitle("-log10 p-values comparative") +
+  theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
+  scale_color_discrete(name = "") +
+  geom_abline(intercept = 0, slope = 1,  linetype = "dashed")
+
+cor.test(-log10(diffPairs$p.value.y), -log10(diffPairs$p.value))
+```
+
+There is a high correlation between the -log10 p-values obtained in the stratified analyses, even for these pairs were the FC is different between boys and girls. This fact suggest that, for most of the pairs, the CpGs regulate gene expression in boys and girls but with different strength due to other factors. For other pairs, the CpG only regulated gene expression in boys or girls (Boys only / Girls only).
+
+## Compare FC Estimates
+
+Second, we compared the FC obtained after including only boys or only girls of those CpG-TC pairs found as significant in any of the three groups.
+
+```{r}
+ggplot(mergeAll, aes(x = FC.y, y = FC, col = Sig)) +
+  geom_point() +
+  scale_x_continuous(name = "Females") + 
+  scale_y_continuous("Males") + 
+  ggtitle("Estimates comparative") +
+  theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
+  scale_color_discrete(name = "") +
+  geom_abline(intercept = 0, slope = 1,  linetype = "dashed")
+```
+
+We do not observe big difference between the FC estimates obtained in boys and in girls. 
+
+```{r}
+ggplot(diffPairs, aes(x = FC.y, y = FC, col = Sig2)) +
+  geom_point() +
+  scale_x_continuous(name = "Females") + 
+  scale_y_continuous("Males") + 
+  ggtitle("Estimates comparative") +
+  theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
+  scale_color_discrete(name = "") +
+  geom_abline(intercept = 0, slope = 1,  linetype = "dashed")
+```
+
+When we compare fold changes, pairs found in boys and girls have more similar estimates in both groups Interestingly, some pairs with big FCs in boys and girls but very different FCs, are only found as significant in one group, suggesting that these pairs have big uncertainties in the estimation, reducing the statistical power. Finally, pairs with effect in only one group (Boys Only / Girls Only) have very low FCs in the other group. 
+
+# Pairs only found in Boys
+
+```{r}
+boysPairs <- filter(diffPairs, Sig2 == "Boys Only" & sigPair == TRUE) %>%
+  select(CpG, TC, sigPair)
+```
+
+In `r nrow(boysPairs)` pairs, the CpG only regulated gene expression in boys. 
+
+## Explore CpGs
+
+```{r}
+boysMetAnn <- methyAnnot %>%
+  as_tibble() %>%
+  mutate(CpG = Name,
+         GeneRel = ifelse(UCSC_RefGene_Name == "", "Intergenic", "Genic"),
+         chr = factor(chr, levels = paste0("chr", c(1:22, "X")))) %>%
+  select(CpG, chr, GeneRel) %>%
+  right_join(boysPairs, by = "CpG")
+
+boysMetAnn %>% 
+  select(CpG, chr) %>%
+  distinct() %>%
+  ggplot(aes(x = chr)) + geom_bar() + theme_bw() +
+  xlab("") + ylab("")
+
+boysMetAnn %>% 
+  select(CpG, GeneRel) %>%
+  distinct() %>%
+  ggplot(aes(x = GeneRel)) + geom_bar() + theme_bw() +
+  xlab("") + ylab("")
+
+```
+
+Most of the pairs specific for boys are placed in chromosome X in genic regions. Most of these pairs, the CpG is specific of one TC (`r round(mean(table(boysMetAnn$CpG) == 1)*100, 2)` %). 
+
+
+```{r}
+boysPairsMerge <- mergeAll %>%
+  select(CpG, TC, sigPair, FC) %>%
+  filter(sigPair == TRUE) %>%
+  semi_join(boysPairs, by = "CpG") %>%
+  mutate(class = ifelse(CpG %in% filter(count(., CpG), n == 1)$CpG, "Mono", "Multi"))
+
+boysPairsMerge <- boysPairsMerge %>%
+  group_by(CpG) %>%
+  summarize(d = mean(FC > 0)) %>%
+  mutate(Direction = factor(ifelse(d == 0, "Negative", ifelse(d == 1, "Positive", "Both")), levels = c("Negative", "Positive", "Both"))) %>%
+  select(CpG, Direction) %>%
+  left_join(boysPairsMerge, ., by = "CpG")
+
+
+boysPairsMerge %>%
+   group_by(CpG) %>%
+   summarize(n = n()) %>%
+   ggplot(aes(x = n)) + geom_histogram() + theme_bw() +
+   xlab("") + ylab("")
+
+boysPairsMerge %>% 
+  select(CpG, class, Direction) %>%
+  distinct() %>%
+  ggplot(aes(x = Direction)) + geom_bar() + theme_bw() +
+  xlab("") + ylab("") + facet_grid(~class, scales = "free_x")
+
+```
+
+If we consider all the significant pairs of these CpGs, a lower proportion of CpGs only affect one TC (`r round(mean(table(boysPairsMerge$CpG) == 1)*100, 2)` %). These CpGs are more likely to regulate negatively gene expression. Nonetheless, we have a higher proportion of CpGs regulating positively gene expression than in the general analysis. 
+
+## Explore TCs
+
+```{r}
+boysGExAnn <- expAnnot %>%
+  as_tibble() %>%
+  mutate(TC = transcript_cluster_id) %>%
+  select(TC, GeneSymbol_Affy) %>%
+  right_join(boysPairs, by = "TC")
+```
+
+Most of these pairs, the TC is only regulated by one CpG (`r round(mean(table(boysGExAnn$TC) == 1)*100, 2)` %). 
+
+# Pairs only found in Girls
+
+```{r}
+girlsPairs <- filter(diffPairs, Sig2 == "Girls Only" & sigPair.y == TRUE) %>%
+  select(CpG, TC, sigPair)
+```
+
+In `r nrow(girlsPairs)` pairs, the CpG only regulated gene expression in girls. 
+## Explore CpGs
+
+```{r}
+girlsMetAnn <- methyAnnot %>%
+  as_tibble() %>%
+  mutate(CpG = Name,
+         GeneRel = ifelse(UCSC_RefGene_Name == "", "Intergenic", "Genic"),
+         chr = factor(chr, levels = paste0("chr", c(1:22, "X")))) %>%
+  select(CpG, chr, GeneRel) %>%
+  right_join(girlsPairs, by = "CpG")
+
+girlsMetAnn %>% 
+  select(CpG, chr) %>%
+  distinct() %>%
+  ggplot(aes(x = chr)) + geom_bar() + theme_bw() +
+  xlab("") + ylab("")
+
+girlsMetAnn %>% 
+  select(CpG, GeneRel) %>%
+  distinct() %>%
+  ggplot(aes(x = GeneRel)) + geom_bar() + theme_bw() +
+  xlab("") + ylab("")
+```
+
+Again, most of the pairs specific for girls are placed in chromosome X in genic regions. Most of these pairs, the CpG is specific of one TC (`r round(mean(table(girlsMetAnn$CpG) == 1)*100, 2)` %). 
+
+
+```{r}
+girlsPairsMerge <- mergeAll %>%
+  select(CpG, TC, sigPair.y, FC.y) %>%
+  filter(sigPair.y == TRUE) %>%
+  semi_join(girlsPairs, by = "CpG") 
+
+girlsPairsMerge <- girlsPairsMerge %>%
+  group_by(CpG) %>%
+  summarize(d = mean(FC.y > 0), n = n()) %>%
+  mutate(class = ifelse(n == 1, "Mono", "Multi"),
+           Direction = factor(ifelse(d == 0, "Negative", ifelse(d == 1, "Positive", "Both")), levels = c("Negative", "Positive", "Both"))) %>%
+  select(CpG, class, Direction) %>%
+  left_join(girlsPairsMerge, ., by = "CpG")
+
+girlsPairsMerge %>% 
+  select(CpG, class, Direction) %>%
+  distinct() %>%
+  ggplot(aes(x = Direction)) + geom_bar() + theme_bw() +
+  xlab("") + ylab("") + facet_grid(~class, scales = "free_x")
+
+```
+
+If we consider all the significant pairs of these CpGs, a lower proportion of CpGs only affect one TC (`r round(mean(table(girlsPairsMerge$CpG) == 1)*100, 2)` %). These CpGs are more likely to regulate negatively gene expression, having higher proportion of negative associations than for boys. Nonetheless, we have a higher proportion of CpGs regulating positively gene expression than in the general analysis. 
+
+## Explore TCs
+
+```{r}
+girlsGExAnn <- expAnnot %>%
+  as_tibble() %>%
+  mutate(TC = transcript_cluster_id) %>%
+  select(TC, GeneSymbol_Affy) %>%
+  right_join(girlsPairs, by = "TC")
+```
+
+Most of these pairs, the TC is only regulated by one CpG (`r round(mean(table(boysGExAnn$TC) == 1)*100, 2)` %). 
+
+
+# Gene enrichment
+
+```{r}
+allGenes <- expAnnot %>%
+  as_tibble() %>%
+  mutate(TC = transcript_cluster_id) %>%
+  inner_join(fem, by = "TC") %>%
+  `$`("GeneSymbol_Affy") %>%
+  strsplit(., split = ";") %>%
+  unlist() %>%
+  unique()
+
+allGenesENT <- bitr(allGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
+boyGenes <- unique(unlist(strsplit(boysGExAnn$GeneSymbol_Affy, ";")))
+boyGenesENT <-  bitr(boyGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
+
+girlGenes <- unique(unlist(strsplit(girlsGExAnn$GeneSymbol_Affy, ";")))
+girlGenesENT <-  bitr(girlGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
+
+go <- compareCluster(geneCluster = list(boy = boyGenesENT$ENTREZID, 
+                                        girl = girlGenesENT$ENTREZID), 
+                     fun = "enrichGO", universe = allGenesENT$ENTREZID, 
+                     ont = "BP",
+                    OrgDb = org.Hs.eg.db)
+
+dotplot(go)
+
+kegg <- compareCluster(geneCluster = list(boy = boyGenesENT$ENTREZID, 
+                                        girl = girlGenesENT$ENTREZID), 
+                     fun = "enrichKEGG",
+                     universe = allGenesENT$ENTREZID, 
+                     organism = "hsa")
+dotplot(kegg)
+
+```
+
+Genes from the pairs specific of boys are enriched in pathways associated with immunity, while the genes from the girl pairs are not enriched in any pathway. 
