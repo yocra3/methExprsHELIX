@@ -55,8 +55,6 @@ draw.triple.venn(area1 = length(sigFA), area2 = length(sigFM), area3 = length(si
                  n13 = length(intersect(sigFA, sigFF)), 
                  n123 = length(intersect(intersect(sigFA, sigFM), sigFF)), 
                  category = c("All Samples", "Boys", "Girls"), lty = "blank")
-
-allSig
 ```
 
 As expected, we detect more CpGs affecting gene expression when we include all individuals. Nonetheless, almost half of these CpGs are also found when only including boys or girls. Only `r length(intersect(sigFM, sigFF))` CpGs were found to change gene expression in the stratified analyses but not in the overall. These CpGs are likely to be placed in chromosome X, which were not analyzed in the overall analysis. This low number suggests that regulation in chromosome X is different between boys and girls. Finally, although the number of girls and boys was very similar, boys had almost three times more CpGs affecting gene expression than girls.
