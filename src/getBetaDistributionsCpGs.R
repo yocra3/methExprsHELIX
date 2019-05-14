@@ -50,7 +50,7 @@ getBetaDistributionsCpGs <- function(folder, chr = 1:22){
       })
       
       perms <- Reduce(cbind, resCpG)
-      pmin <- apply(perms, 2, min, na.rm=TRUE)
+      pmin <-  matrixStats::colMins(perms, 2, min, na.rm=TRUE)
       
       llhd2 <- function(x,p) {
         ans <- -sum(log(dbeta(x,p[1],p[2])))

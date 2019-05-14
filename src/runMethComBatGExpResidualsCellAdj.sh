@@ -21,16 +21,16 @@ gexpInput="${resFolder}/gexpInput.Rdata"
 mkdir $resFolder
 
 ## Generate Input data for analysis
-Rscript src/createInputFiles.R $meth $gexp $resFolder autosomes
+Rscript src/createInputFiles.R methy="'$meth'" exprs="'$gexp'" out_fold="'$resFolder'" "autosomes"
 
 ## Divide data for analysis
-Rscript src/divide_data.R $methInput $gexpInput $resFolder
-
+Rscript src/divide_data.R methy="'$methInput'" exprs="'$gexpInput'" out_fold="'$resFolder'"
+  
 ## Run linear models
 for i in {1..22}
 do
   echo $i
-  Rscript src/runLinearModelSubset.R $resFolder chr$i cell $resFolder
+  Rscript src/runLinearModelSubset.R data_fold="'$resFolder'" chr="'chr$i'" model="'cell'" out_fold="'$resFolder'"
 done
 
 

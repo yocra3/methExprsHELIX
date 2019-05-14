@@ -2,6 +2,15 @@
 # Check simulations contain all pairs
 ###############################################################################
 
+## Count files with output
+find ./ -name outputchr*.txt | wc
+
+for i in {1..100}
+do
+ echo sim$i `(ls sim$i/outputchr*.txt | wc -l)` | grep -v 22$
+done 
+
+
 ## Make files with lines per simulation
 ls -d */ -I lista>lista
 
@@ -25,6 +34,13 @@ for i in $(cat lista)
 do
 wc -l "$i"outputchr$j.txt>>lineas_$j.txt
 done
+
+# Autosomes
+### Check all files have the same pairs
+badSims <- lapply(1:22, function(chr) {
+  chrlist <- read.table(paste0("lineas_", chr, ".txt"), as.is = TRUE)
+})
+sapply(badSims, function(x) length(unique(x[,1])))
 
 
 

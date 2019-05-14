@@ -39,7 +39,7 @@ if ("autosomes" %in% arg){
   se <- se[!seqnames(rowRanges(se)) %in% c("chrX", "chrY"), ]
 }
 
-## Remove probes in sexual chromosomes
+## Stratify individuals by sex
 if ("sex-stratify" %in% arg){
   gsetall <- gset
   gset <- gsetall[, gsetall$e3_sex == "male"]

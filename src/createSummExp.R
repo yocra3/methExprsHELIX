@@ -24,6 +24,15 @@ gexp <- gexp[fData(gexp)$fil1 == "no", ]
 
 # Making SE
 se <- makeSummarizedExperimentFromExpressionSet(gexp)
+
+## Change ranges to be TSS
+gr <- rowRanges(se)
+gr$TC_Start <- start(gr)
+gr$TC_end <- end(gr)
+start(gr) <- gr$TSS_Affy
+end(gr) <- gr$TSS_Affy
+rowRanges(se) <- gr
+
 save(se, file = "results/preprocessFiles/Expression_SE_raw.RData")
 
 ## Compute Residuals ####
@@ -46,10 +55,8 @@ mod <- model.matrix(~ cohort + e3_sex + age_sample_years +
                       Mono_6, data = pd)
 sv.obj <- smartsva.cpp(mat, mod, mod0 = NULL, n.sv = n.sv)
 
-# Eliminem l'efecte de les variables que hem seleccionat i SVs,
-# es a dir, obtenim els residuals
-model <- cbind(mod, sv.obj$sv)
-res <- residuals(lmFit(mat, model), mat)
+# Residuaals de només els SVs.
+res <- residuals(lmFit(mat, sv.obj$sv), mat)
 
 # Save
 assay(se) <- res

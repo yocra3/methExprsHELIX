@@ -1,5 +1,5 @@
 ---
-title: "HELIX meth-expr Cell adjusted results"
+title: "HELIX meth-expr No Cell adjusted results"
 author: 
 - Carlos Ruiz 
 
@@ -28,7 +28,7 @@ library(cowplot)
 library(tidyr)
 library(UpSetR)
 
-load("results/MethComBatExpResidualsCellAdj/allres_simP_cpgs.Rdata")
+load("results/MethComBatExpResidualsNoCellAdj/allres_simP_cpgs.Rdata")
 load("results/preprocessFiles/allOverlaps.Rdata")
 load("results/preprocessFiles/methyAnnotation.Rdata")
 load("results/preprocessFiles/gexpAnnotation.Rdata")
