@@ -14,9 +14,13 @@ knitr::opts_knit$set(root.dir = "../")
 
 
 ```{r load}
+library(org.Hs.eg.db)
+library(clusterProfiler)
 library(dplyr)
 library(ggplot2)
-library(VennDiagram)
+library(UpSetR)
+
+load("results/preprocessFiles/gexpAnnotation.Rdata")
 
 load("results/MethComBatExpResidualsNoCellAdj/allres_simP_cpgs.Rdata")
 modU <- df
@@ -37,16 +41,12 @@ We fit two models. The difference is whether we included cell composition in the
 ```{r, dev='Cairo_png'}
 sigFU <- subset(featsU, p.val.adj < 0.05)$feat
 sigFC <- subset(featsC, p.val.adj < 0.05)$feat
-sigCom <- intersect(sigFU, sigFC)
 
-
-grid.newpage()
-draw.pairwise.venn(length(sigFU), length(sigFC),length(sigCom), 
-                 category = c("Adjusted", "Adjusted + Cells"), lty = "blank")
-
+upset(fromList(list(Adjusted = sigFU, "Adjusted+Cells" = sigFC)), 
+      order.by = "freq")
 ```
 
-We found `r length(sigFU)` CpGs affecting gene expression with model U and `r length(sigFC)` with model C. Of those, `r length(sigCom)`, were found with both models. Thus, we had higher power to detect associations with model C. 
+We found `r length(sigFU)` CpGs affecting gene expression with model U and `r length(sigFC)` with model C. Of those, `r length(sigCom)`, were found with both models. Thus, we had higher power to detect associations with model U. 
 
 # Compare pairs
 
@@ -76,7 +76,7 @@ ggplot(mergeTB, aes(x = -log10(p.value.y), y = -log10(p.value.x), col = sigType)
   scale_color_discrete(name = "")
 ```
 
-We observe some CpG-TC pairs that are only significant when we adjust for cell counts. 
+We observe some CpG-TC pairs that are only significant when we adjust for cell counts and many other that are only significant without adjusting. 
 
 ```{r}
 par(mfrow = c(1, 2))
@@ -84,7 +84,8 @@ hist(modU$p.value, main = "Model U", xlab = "Raw p-values")
 hist(modC$p.value, main = "Model C", xlab = "Raw p-values")
 ```
 
-In model U histogram, we observe an excess of pairs having p-values close to 1 which we do not observe for model C. This fact is suggesting a deflation in p-values and low power to detect associations, which explains the lower number of associations found. 
+We obtain in general a good distribution of p-values. 
+
 
 ## Compare Estimates
 
@@ -109,4 +110,67 @@ ggplot(mergeTB, aes(x = FC.y, y = FC.x, col = sigType)) +
   scale_color_discrete(name = "")
 ```
 
-Half of the pairs significant after adjusting for cell counts have different estimates between the models, while any of the pairs significant only in the crude model has a different estimate in the cell adjusted model. 
+Most of the significant pairs found by the two models have similar estimates. Of those only significant in model C, a great proportion had similar estimates with model U, although they were not found as significant with this model. On the other hand, most pairs found with model U had different estimates in model C.
+
+# Compare TCs
+
+Finally, we compared whether the genes only found affected in one of the models were enriched in some pathways.
+
+```{r}
+expAnnDF <- as_tibble(as.data.frame(expAnnot))
+expAnnDF$TC <- expAnnDF$transcript_cluster_id
+
+## Make universe
+allGenes <- expAnnDF %>%
+  inner_join(modU, by = "TC") %>%
+  `$`("GeneSymbol_Affy") %>%
+  strsplit(., split = ";") %>%
+  unlist() %>%
+  unique()
+allGenesENT <- bitr(allGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
+
+uGenes <- expAnnDF %>%
+  inner_join(filter(modU, sigPair == TRUE), by = "TC") %>%
+  `$`("GeneSymbol_Affy") %>%
+  strsplit(., split = ";") %>%
+  unlist() %>%
+  unique()
+
+cGenes <- expAnnDF %>%
+  inner_join(filter(modC, sigPair == TRUE), by = "TC") %>%
+  `$`("GeneSymbol_Affy") %>%
+  strsplit(., split = ";") %>%
+  unlist() %>%
+  unique()
+
+uGenessp <- uGenes[!uGenes %in% cGenes]
+cGenessp <- cGenes[!cGenes %in% uGenes]
+
+uGenesENT <- bitr(uGenessp, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
+
+cGenesENT <- bitr(cGenessp, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
+
+
+showEnrichments <- function(genelist){
+  goAll <- enrichGO(genelist, universe = allGenesENT$ENTREZID, 
+                     ont = "BP",
+                    OrgDb = org.Hs.eg.db)
+
+  print(data.frame(goAll)[, 2:6])
+  keggAll <- enrichKEGG(genelist,
+                     universe = allGenesENT$ENTREZID, 
+                     organism = "hsa")
+  print(data.frame(keggAll)[, 2:6])
+  return(list(go = goAll, kegg = keggAll))
+}
+enU <- showEnrichments(uGenesENT$ENTREZID)
+enC <- showEnrichments(cGenesENT$ENTREZID)
+
+
+tcU <- unique(filter(modU, sigPair == TRUE)$TC)
+tcC <- unique(filter(modC, sigPair == TRUE)$TC)
+```
+
+In model C, we found `r length(tcC)` TCs whose expression was affected by DNA methylation. This number raised `r length(tcU)` in model U. Of these TCs, `r length(intersect(tcC, tcU))` were found with both models. 
+
+Genes specific of model U are enriched in processes related with leukocyte differentiation, while genes specific of model C are not enriched in any process.
