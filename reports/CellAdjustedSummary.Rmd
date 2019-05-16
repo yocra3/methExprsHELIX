@@ -187,6 +187,17 @@ CpGs associated to only one TC are on average 24Kb closer to the TSS than CpGs a
 ### Both factors
 
 ```{r}
+df_comp %>%
+     filter(sigPair == TRUE) %>%
+     mutate(CpGclass = ifelse(CpG %in% CpGs1, "Mono", "Multi"),
+                      AssocClass = ifelse(CpG %in% posNeg, "Both",
+             ifelse(FC > 0, "Positive", "Negative"))) %>%
+     ggplot(aes(x = Distance, color = AssocClass)) + geom_density(alpha=0.4) +
+     theme_bw() + facet_wrap(~CpGclass) +
+   scale_x_continuous(labels = c("-500 Kb", "-200 Kb", "-100 Kb", "0", "100 Kb", "250 Kb", "500 Kb"), breaks = c(-5e5, -2.5e5, -1e5, 0, 1e5, 2.5e5, 5e5)) +
+  scale_color_discrete(name = "") +
+theme(axis.text.x  = element_text(angle=90, vjust=0.5))
+
 df_comp %>% 
   filter(sigPair == TRUE) %>%
   mutate(CpGclass = ifelse(CpG %in% CpGs1, "Mono", "Multi"), 

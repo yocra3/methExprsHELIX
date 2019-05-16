@@ -1,0 +1,119 @@
+---
+title: "Comparison methExprs adjustment P-value"
+author: "Carlos Ruiz"
+date: "`r Sys.Date()`"
+output:
+    BiocStyle::html_document:
+      toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, fig.wide = TRUE)
+knitr::opts_knit$set(root.dir = "../")
+```
+
+
+```{r load}
+library(dplyr)
+library(UpSetR)
+```
+
+# Cell counts adjusted
+
+```{r}
+load("results/MethComBatExpResidualsCellAdj/allres_simP_cpgs.Rdata")
+modC <- df %>%
+  as_tibble() %>%
+  mutate(adj.p.value = p.adjust(p.value),
+         sigPair_BH = adj.p.value < 0.05,
+         pair = paste(CpG, TC))
+featsC <- featStatsDF
+
+```
+
+
+## Pairs found
+
+```{r}
+permsP <- modC[modC$sigPair, ]$pair
+BHP <- modC[modC$sigPair_BH, ]$pair
+
+upset(fromList(list(Permutation = permsP, BH = BHP)), 
+      order.by = "freq")
+```
+
+We found `r length(permsP)` pairs with the permutations and `r length(BHP)` pairs with BH. 
+
+## CpGs found
+
+```{r}
+permsCp <- unique(modC[modC$sigPair, ]$CpG)
+BHCp <- unique(modC[modC$sigPair_BH, ]$CpG)
+
+upset(fromList(list(Permutation = permsCp, BH = BHCp)), 
+      order.by = "freq")
+```
+
+We found `r length(permsCp)` CpGs with the permutations and `r length(BHCp)` CpGs with BH. 
+
+## TCs found
+
+```{r}
+permsTC <- unique(modC[modC$sigPair, ]$TC)
+BHTC <- unique(modC[modC$sigPair_BH, ]$TC)
+
+upset(fromList(list(Permutation = permsTC, BH = BHTC)), 
+      order.by = "freq")
+```
+
+We found `r length(permsTC)` TCs with the permutations and `r length(BHTC)` TCs with BH. 
+
+# Variables Adjusted 
+
+```{r}
+load("results/MethComBatExpResidualsNoCellAdj/allres_simP_cpgs.Rdata")
+modU <- df %>%
+  as_tibble() %>%
+  mutate(adj.p.value = p.adjust(p.value),
+         sigPair_BH = adj.p.value < 0.05,
+         pair = paste(CpG, TC))
+featsU <- featStatsDF
+```
+
+
+## Pairs found
+
+```{r}
+permsP <- modU[modU$sigPair, ]$pair
+BHP <- modU[modU$sigPair_BH, ]$pair
+
+upset(fromList(list(Permutation = permsP, BH = BHP)), 
+      order.by = "freq")
+```
+
+We found `r length(permsP)` pairs with the permutations and `r length(BHP)` pairs with BH. 
+
+
+## CpGs found
+
+```{r}
+permsCp <- unique(modU[modU$sigPair, ]$CpG)
+BHCp <- unique(modU[modU$sigPair_BH, ]$CpG)
+
+upset(fromList(list(Permutation = permsCp, BH = BHCp)), 
+      order.by = "freq")
+```
+
+We found `r length(permsCp)` CpGs with the permutations and `r length(BHCp)` CpGs with BH. 
+
+## TCs found
+
+```{r}
+permsTC <- unique(modU[modU$sigPair, ]$TC)
+BHTC <- unique(modU[modU$sigPair_BH, ]$TC)
+
+upset(fromList(list(Permutation = permsTC, BH = BHTC)), 
+      order.by = "freq")
+```
+
+We found `r length(permsTC)` TCs with the permutations and `r length(BHTC)` TCs with BH. 
