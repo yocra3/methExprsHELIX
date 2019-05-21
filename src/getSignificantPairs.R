@@ -55,7 +55,8 @@ featPvals <- function(feat, df, distr, base){
 
 featsPvals <- pbsapply(feats, featPvals, df = df, distr = distr, base = base, 
                      cl = 7)
-featStatsDF <- data.frame(feat = feats, p.val = featsPvals, p.val.adj = p.adjust(featsPvals),
+featStatsDF <- data.frame(feat = feats, p.val = featsPvals, 
+                          p.val.adj = p.adjust(featsPvals, "BH"),
                           stringsAsFactors = FALSE)
 sigFeats <- subset(featStatsDF, p.val.adj < 0.05)$feat
 thresP <- max(featStatsDF[sigFeats, "p.val"])
