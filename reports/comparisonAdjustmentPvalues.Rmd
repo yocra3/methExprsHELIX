@@ -16,6 +16,10 @@ knitr::opts_knit$set(root.dir = "../")
 ```{r load}
 library(dplyr)
 library(UpSetR)
+
+load("results/preprocessFiles/gexpAnnotation.Rdata")
+expAnnot$TC <- expAnnot$transcript_cluster_id
+
 ```
 
 # Cell counts adjusted
@@ -24,8 +28,10 @@ library(UpSetR)
 load("results/MethComBatExpResidualsCellAdj/allres_simP_cpgs.Rdata")
 modC <- df %>%
   as_tibble() %>%
-  mutate(adj.p.value = p.adjust(p.value),
+  mutate(adj.p.value = p.adjust(p.value, "BH"),
          sigPair_BH = adj.p.value < 0.05,
+         adj.p.value.BF = p.adjust(p.value, "bonferroni"),
+         sigPair_BF = adj.p.value.BF < 0.05,
          pair = paste(CpG, TC))
 featsC <- featStatsDF
 
@@ -37,36 +43,135 @@ featsC <- featStatsDF
 ```{r}
 permsP <- modC[modC$sigPair, ]$pair
 BHP <- modC[modC$sigPair_BH, ]$pair
+BFP <- modC[modC$sigPair_BF, ]$pair
 
-upset(fromList(list(Permutation = permsP, BH = BHP)), 
+upset(fromList(list(Permutation = permsP, BH = BHP, Bonferroni = BFP)), 
       order.by = "freq")
 ```
 
-We found `r length(permsP)` pairs with the permutations and `r length(BHP)` pairs with BH. 
+We found `r length(permsP)` pairs with the permutations, `r length(BHP)` pairs with BH and `r length(BFP)` with Bonferroni. 
 
 ## CpGs found
 
 ```{r}
 permsCp <- unique(modC[modC$sigPair, ]$CpG)
 BHCp <- unique(modC[modC$sigPair_BH, ]$CpG)
+BFCp <- unique(modC[modC$sigPair_BF, ]$CpG)
 
-upset(fromList(list(Permutation = permsCp, BH = BHCp)), 
+upset(fromList(list(Permutation = permsCp, BH = BHCp, Bonferroni = BFCp)), 
       order.by = "freq")
 ```
 
-We found `r length(permsCp)` CpGs with the permutations and `r length(BHCp)` CpGs with BH. 
+We found `r length(permsCp)` CpGs with the permutations, `r length(BHCp)` CpGs with BH and `r length(BFCp)` with Bonferroni.  
+
+
+```{r}
+permsSum <- modC %>%
+  group_by(CpG) %>%
+  summarise(Type = ifelse(sum(sigPair) == 0, "Non-significant",
+                          ifelse(sum(sigPair) == 1, "Mono", "Multi")),
+            Direction = ifelse(sum(sigPair) == 0, "Non-significant",
+                               ifelse(all(FC[sigPair] > 0), "Positive", 
+                                      ifelse(all(FC[sigPair] < 0), "Negative", "Both"))))
+BHSum <- modC %>%
+  group_by(CpG) %>%
+  summarise(Type = ifelse(sum(sigPair_BH) == 0, "Non-significant",
+                          ifelse(sum(sigPair_BH) == 1, "Mono", "Multi")),
+            Direction = ifelse(sum(sigPair_BH) == 0, "Non-significant",
+                               ifelse(all(FC[sigPair_BH] > 0), "Positive", 
+                                      ifelse(all(FC[sigPair_BH] < 0), "Negative", "Both"))))
+BFSum <- modC %>%
+  group_by(CpG) %>%
+  summarise(Type = ifelse(sum(sigPair_BF) == 0, "Non-significant",
+                          ifelse(sum(sigPair_BF) == 1, "Mono", "Multi")),
+            Direction = ifelse(sum(sigPair_BF) == 0, "Non-significant",
+                               ifelse(all(FC[sigPair_BF] > 0), "Positive", 
+                                      ifelse(all(FC[sigPair_BF] < 0), "Negative", "Both"))))
+
+
+```
+
+### Single CpGs
+
+```{r}
+permsSing <- permsSum[permsSum$Type == "Mono", ]$CpG
+BHCSing <- BHSum[BHSum$Type == "Mono", ]$CpG
+BFCSing <- BFSum[BFSum$Type == "Mono", ]$CpG
+
+upset(fromList(list(Permutation = permsSing, BH = BHCSing, Bonferroni = BFCSing)), 
+      order.by = "freq")
+```
+
+We found `r length(permsSing)` single CpGs with the permutations, `r length(BHCSing)` single CpGs with BH and `r length(BFCSing)` with Bonferroni.  
+
+
+### Multi CpGs
+
+```{r}
+permsMul <- permsSum[permsSum$Type == "Multi", ]$CpG
+BHCMul <- BHSum[BHSum$Type == "Multi", ]$CpG
+BFCMul <- BFSum[BFSum$Type == "Multi", ]$CpG
+
+upset(fromList(list(Permutation = permsMul, BH = BHCMul, Bonferroni = BFCMul)), 
+      order.by = "freq")
+```
+
+We found `r length(permsMul)` multi CpGs with the permutations, `r length(BHCMul)` multi CpGs with BH and `r length(BFCMul)` with Bonferroni.  
+
+### Positive CpGs
+
+```{r}
+permsPos <- permsSum[permsSum$Direction == "Positive", ]$CpG
+BHCPos <- BHSum[BHSum$Direction == "Positive", ]$CpG
+BFCPos <- BFSum[BFSum$Direction == "Positive", ]$CpG
+
+upset(fromList(list(Permutation = permsPos, BH = BHCPos, Bonferroni = BFCPos)), 
+      order.by = "freq")
+```
+
+We found `r length(permsPos)` positive CpGs with the permutations, `r length(BHCPos)` positive CpGs with BH and `r length(BFCPos)` with Bonferroni.  
+
+### Inverse CpGs
+
+```{r}
+permsNeg <- permsSum[permsSum$Direction == "Negative", ]$CpG
+BHCNeg <- BHSum[BHSum$Direction == "Negative", ]$CpG
+BFCNeg <- BFSum[BFSum$Direction == "Negative", ]$CpG
+
+upset(fromList(list(Permutation = permsNeg, BH = BHCNeg, Bonferroni = BFCNeg)), 
+      order.by = "freq")
+```
+
+We found `r length(permsNeg)` negative CpGs with the permutations, `r length(BHCNeg)` negative CpGs with BH and `r length(BFCNeg)` with Bonferroni.  
+
+
 
 ## TCs found
 
 ```{r}
 permsTC <- unique(modC[modC$sigPair, ]$TC)
 BHTC <- unique(modC[modC$sigPair_BH, ]$TC)
+BFTC <- unique(modC[modC$sigPair_BF, ]$TC)
 
-upset(fromList(list(Permutation = permsTC, BH = BHTC)), 
+upset(fromList(list(Permutation = permsTC, BH = BHTC, Bonferroni = BFTC)), 
       order.by = "freq")
 ```
 
-We found `r length(permsTC)` TCs with the permutations and `r length(BHTC)` TCs with BH. 
+We found `r length(permsTC)` TCs with the permutations, `r length(BHTC)` TCs with BH and `r length(BFTC)` with Bonferroni. 
+
+
+```{r}
+modC <- modC %>%
+  left_join(select(expAnnot, TC, Coding), by = "TC")
+
+permsCodTC <- unique(modC[modC$sigPair & modC$Coding == "coding", ]$TC)
+BHCodTC <- unique(modC[modC$sigPair_BH & modC$Coding == "coding", ]$TC)
+BFCodTC <- unique(modC[modC$sigPair_BF & modC$Coding == "coding", ]$TC)
+
+upset(fromList(list(Permutation = permsCodTC, BH = BHCodTC, Bonferroni = BFCodTC)), order.by = "freq")
+```
+
+We found `r length(permsCodTC)` coding TCs with the permutations, `r length(BHCodTC)` coding TCs with BH and `r length(BFCodTC)` with Bonferroni. 
 
 # Variables Adjusted 
 
@@ -74,46 +179,141 @@ We found `r length(permsTC)` TCs with the permutations and `r length(BHTC)` TCs 
 load("results/MethComBatExpResidualsNoCellAdj/allres_simP_cpgs.Rdata")
 modU <- df %>%
   as_tibble() %>%
-  mutate(adj.p.value = p.adjust(p.value),
+  mutate(adj.p.value = p.adjust(p.value, "BH"),
          sigPair_BH = adj.p.value < 0.05,
+         adj.p.value.BF = p.adjust(p.value, "bonferroni"),
+         sigPair_BF = adj.p.value.BF < 0.05,
          pair = paste(CpG, TC))
 featsU <- featStatsDF
 ```
-
 
 ## Pairs found
 
 ```{r}
 permsP <- modU[modU$sigPair, ]$pair
 BHP <- modU[modU$sigPair_BH, ]$pair
+BFP <- modU[modU$sigPair_BF, ]$pair
 
-upset(fromList(list(Permutation = permsP, BH = BHP)), 
+upset(fromList(list(Permutation = permsP, BH = BHP, Bonferroni = BFP)), 
       order.by = "freq")
 ```
 
-We found `r length(permsP)` pairs with the permutations and `r length(BHP)` pairs with BH. 
-
+We found `r length(permsP)` pairs with the permutations, `r length(BHP)` pairs with BH and `r length(BFP)` with Bonferroni. 
 
 ## CpGs found
 
 ```{r}
 permsCp <- unique(modU[modU$sigPair, ]$CpG)
 BHCp <- unique(modU[modU$sigPair_BH, ]$CpG)
+BFCp <- unique(modU[modU$sigPair_BF, ]$CpG)
 
-upset(fromList(list(Permutation = permsCp, BH = BHCp)), 
+upset(fromList(list(Permutation = permsCp, BH = BHCp, Bonferroni = BFCp)), 
       order.by = "freq")
 ```
 
-We found `r length(permsCp)` CpGs with the permutations and `r length(BHCp)` CpGs with BH. 
+We found `r length(permsCp)` CpGs with the permutations, `r length(BHCp)` CpGs with BH and `r length(BFCp)` with Bonferroni.  
+
+
+
+```{r}
+permsSum <- modU %>%
+  group_by(CpG) %>%
+  summarise(Type = ifelse(sum(sigPair) == 0, "Non-significant",
+                          ifelse(sum(sigPair) == 1, "Mono", "Multi")),
+            Direction = ifelse(sum(sigPair) == 0, "Non-significant",
+                               ifelse(all(FC[sigPair] > 0), "Positive", 
+                                      ifelse(all(FC[sigPair] < 0), "Negative", "Both"))))
+BHSum <- modU %>%
+  group_by(CpG) %>%
+  summarise(Type = ifelse(sum(sigPair_BH) == 0, "Non-significant",
+                          ifelse(sum(sigPair_BH) == 1, "Mono", "Multi")),
+            Direction = ifelse(sum(sigPair_BH) == 0, "Non-significant",
+                               ifelse(all(FC[sigPair_BH] > 0), "Positive", 
+                                      ifelse(all(FC[sigPair_BH] < 0), "Negative", "Both"))))
+BFSum <- modU %>%
+  group_by(CpG) %>%
+  summarise(Type = ifelse(sum(sigPair_BF) == 0, "Non-significant",
+                          ifelse(sum(sigPair_BF) == 1, "Mono", "Multi")),
+            Direction = ifelse(sum(sigPair_BF) == 0, "Non-significant",
+                               ifelse(all(FC[sigPair_BF] > 0), "Positive", 
+                                      ifelse(all(FC[sigPair_BF] < 0), "Negative", "Both"))))
+
+
+```
+
+### Single CpGs
+
+```{r}
+permsSing <- permsSum[permsSum$Type == "Mono", ]$CpG
+BHCSing <- BHSum[BHSum$Type == "Mono", ]$CpG
+BFCSing <- BFSum[BFSum$Type == "Mono", ]$CpG
+
+upset(fromList(list(Permutation = permsSing, BH = BHCSing, Bonferroni = BFCSing)), 
+      order.by = "freq")
+```
+
+We found `r length(permsSing)` single CpGs with the permutations, `r length(BHCSing)` single CpGs with BH and `r length(BFCSing)` with Bonferroni.  
+
+
+### Multi CpGs
+
+```{r}
+permsMul <- permsSum[permsSum$Type == "Multi", ]$CpG
+BHCMul <- BHSum[BHSum$Type == "Multi", ]$CpG
+BFCMul <- BFSum[BFSum$Type == "Multi", ]$CpG
+
+upset(fromList(list(Permutation = permsMul, BH = BHCMul, Bonferroni = BFCMul)),       order.by = "freq")
+```
+
+We found `r length(permsMul)` multi CpGs with the permutations, `r length(BHCMul)` multi CpGs with BH and `r length(BFCMul)` with Bonferroni.  
+
+### Positive CpGs
+
+```{r}
+permsPos <- permsSum[permsSum$Direction == "Positive", ]$CpG
+BHCPos <- BHSum[BHSum$Direction == "Positive", ]$CpG
+BFCPos <- BFSum[BFSum$Direction == "Positive", ]$CpG
+
+upset(fromList(list(Permutation = permsPos, BH = BHCPos, Bonferroni = BFCPos)),       order.by = "freq")
+```
+
+We found `r length(permsPos)` positive CpGs with the permutations, `r length(BHCPos)` positive CpGs with BH and `r length(BFCPos)` with Bonferroni.  
+
+### Inverse CpGs
+
+```{r}
+permsNeg <- permsSum[permsSum$Direction == "Negative", ]$CpG
+BHCNeg <- BHSum[BHSum$Direction == "Negative", ]$CpG
+BFCNeg <- BFSum[BFSum$Direction == "Negative", ]$CpG
+
+upset(fromList(list(Permutation = permsNeg, BH = BHCNeg, Bonferroni = BFCNeg)),       order.by = "freq")
+```
+
+We found `r length(permsNeg)` negative CpGs with the permutations, `r length(BHCNeg)` negative CpGs with BH and `r length(BFCNeg)` with Bonferroni.  
 
 ## TCs found
 
 ```{r}
 permsTC <- unique(modU[modU$sigPair, ]$TC)
 BHTC <- unique(modU[modU$sigPair_BH, ]$TC)
+BFTC <- unique(modU[modU$sigPair_BF, ]$TC)
 
-upset(fromList(list(Permutation = permsTC, BH = BHTC)), 
+upset(fromList(list(Permutation = permsTC, BH = BHTC, Bonferroni = BFTC)), 
       order.by = "freq")
 ```
 
-We found `r length(permsTC)` TCs with the permutations and `r length(BHTC)` TCs with BH. 
+We found `r length(permsTC)` TCs with the permutations, `r length(BHTC)` TCs with BH and `r length(BFTC)` with Bonferroni. 
+
+```{r}
+modU <- modU %>%
+  left_join(select(expAnnot, TC, Coding), by = "TC")
+
+permsCodTC <- unique(modU[modU$sigPair & modU$Coding == "coding", ]$TC)
+BHCodTC <- unique(modU[modU$sigPair_BH & modU$Coding == "coding", ]$TC)
+BFCodTC <- unique(modU[modU$sigPair_BF & modU$Coding == "coding", ]$TC)
+
+upset(fromList(list(Permutation = permsCodTC, BH = BHCodTC, Bonferroni = BFCodTC)), order.by = "freq")
+```
+
+We found `r length(permsCodTC)` coding TCs with the permutations, `r length(BHCodTC)` coding TCs with BH and `r length(BFCodTC)` with Bonferroni. 
+

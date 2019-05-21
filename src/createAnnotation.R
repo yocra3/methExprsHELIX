@@ -5,6 +5,7 @@
 library(GenomicRanges)
 library(SummarizedExperiment)
 library(minfi)
+library(dplyr)
 
 # DNA Methylation Annotation ####
 load("results/preprocessFiles/Methylation_GRSet.RData")
@@ -41,8 +42,12 @@ save(methyAnnot, file = "results/preprocessFiles/methyAnnotation.Rdata")
 
 # Gene Expression Annotation ####
 load("results/preprocessFiles/Expression_SE_residuals.RData")
+annot <- read.csv("/home/isglobal.lan/cruiz/data/WS_HELIX/HELIX_preproc/gene_expression/annotation/HTA-2_0.na36.hg19.transcript.csv", comment.char="#", as.is = TRUE)
 
-expAnnot <- rowRanges(se)[, c(1:3, 7:11)]
+expAnnot <- annot %>%
+  as_tibble() %>%
+  right_join(as_tibble(mcols(rowRanges(se))[, c(1, 7:11)]), by = "transcript_cluster_id") %>%
+  mutate(Coding = ifelse(swissprot != "---", "coding", "non-coding"))
 save(expAnnot, file = "results/preprocessFiles/gexpAnnotation.Rdata")
 
 
