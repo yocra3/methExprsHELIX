@@ -1182,7 +1182,7 @@ bothE <- ewasSum %>%
 rbind(sigE, negE, posE, bothE) %>%
   spread(par, Value) %>%
   mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
     geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
 scale_y_continuous(trans = "log2", 
@@ -1225,7 +1225,7 @@ multiE <- ewasSum %>%
 rbind(sigE, monoE, multiE) %>%
   spread(par, Value) %>%
   mutate(Type = factor(Type, levels = c("Significant", "Mono", "Multi"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
     geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
 scale_y_continuous(trans = "log2", 
@@ -1359,7 +1359,7 @@ bothAt <- atlasSum %>%
 rbind(sigAt, negAt, posAt, bothAt) %>%
   spread(par, Value) %>%
   mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
     geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
 scale_y_continuous(trans = "log2", 
@@ -1399,7 +1399,7 @@ multiAt <- atlasSum %>%
 rbind(sigAt, monoAt, multiAt) %>%
   spread(par, Value) %>%
   mutate(Type = factor(Type, levels = c("Significant", "Mono", "Multi"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
     geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
 scale_y_continuous(trans = "log2", 
