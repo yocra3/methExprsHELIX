@@ -66,7 +66,7 @@ CpGsSum <- df %>%
                           ifelse(sum(sigPair) == 1, "Mono", "Multi")),
             Direction = ifelse(sum(sigPair) == 0, "Non-significant",
                                ifelse(all(FC[sigPair] > 0), "Positive", 
-                                      ifelse(all(FC[sigPair] < 0), "Negative", "Both"))))
+                                      ifelse(all(FC[sigPair] < 0), "Inverse", "Both"))))
 
 
 CpGs1 <- a[a$Freq == 1, "Var1"]
@@ -104,12 +104,12 @@ ggplot(df_comp, aes(x = Distance, color = sigPair)) + geom_density() +
 
 CpGs tend to be associated with expression of close TCs. We do not observe differences when CpGs are upstream or downstream. 
 
-### Positive vs negative
+### Positive vs Inverse
 
 ```{r}
 quantiles <- df_comp %>% 
   filter(sigPair == TRUE) %>%
-  mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
+  mutate(class = ifelse(FC > 0, "Positive", "Inverse")) %>%
   group_by(class) %>%
   summarize(q05 = quantile(Distance, 0.05),
             q17 = quantile(Distance, 0.17),
@@ -120,7 +120,7 @@ quantiles <- df_comp %>%
 
 pA <- df_comp %>% 
   filter(sigPair == TRUE) %>%
-  mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
+  mutate(class = ifelse(FC > 0, "Positive", "Inverse")) %>%
   ggplot(aes(x = Distance, color = class)) + geom_density() + 
   theme_bw() + 
   scale_color_discrete(name = "") +
@@ -128,7 +128,7 @@ pA <- df_comp %>%
 
 pB <- df_comp %>% 
   filter(sigPair == TRUE) %>%
-  mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
+  mutate(class = ifelse(FC > 0, "Positive", "Inverse")) %>%
   ggplot(aes(x = abs(Distance) + 1, color = class)) + geom_density(alpha=0.4) + 
   theme_bw() + 
   scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 1e5), labels = c("10b", "1Kb", "100Kb")) + 
@@ -138,7 +138,7 @@ plot_grid(pA, pB, nrow = 2)
 
 df_comp %>% 
   filter(sigPair == TRUE) %>%
-  mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
+  mutate(class = ifelse(FC > 0, "Positive", "Inverse")) %>%
   lm(formula = abs(Distance) ~ class) %>% summary
 ```
 
@@ -187,11 +187,22 @@ CpGs associated to only one TC are on average 24Kb closer to the TSS than CpGs a
 ### Both factors
 
 ```{r}
+df_comp %>%
+     filter(sigPair == TRUE) %>%
+     mutate(CpGclass = ifelse(CpG %in% CpGs1, "Mono", "Multi"),
+                      AssocClass = ifelse(CpG %in% posNeg, "Both",
+             ifelse(FC > 0, "Positive", "Inverse"))) %>%
+     ggplot(aes(x = Distance, color = AssocClass)) + geom_density(alpha=0.4) +
+     theme_bw() + facet_wrap(~CpGclass) +
+   scale_x_continuous(labels = c("-500 Kb", "-200 Kb", "-100 Kb", "0", "100 Kb", "250 Kb", "500 Kb"), breaks = c(-5e5, -2.5e5, -1e5, 0, 1e5, 2.5e5, 5e5)) +
+  scale_color_discrete(name = "") +
+theme(axis.text.x  = element_text(angle=90, vjust=0.5))
+
 df_comp %>% 
   filter(sigPair == TRUE) %>%
   mutate(CpGclass = ifelse(CpG %in% CpGs1, "Mono", "Multi"), 
          AssocClass = ifelse(CpG %in% posNeg, "Both",
-                             ifelse(FC > 0, "Positive", "Negative"))) %>%
+                             ifelse(FC > 0, "Positive", "Inverse"))) %>%
   ggplot(aes(x = abs(Distance) + 1, color = AssocClass)) + geom_density(alpha=0.4) + 
   theme_bw() + facet_wrap(~CpGclass) + 
   scale_x_log10(name = "Distance (log10)", breaks = c(10, 1000, 1e5), labels = c("10b", "1Kb", "100Kb")) + 
@@ -201,7 +212,7 @@ df_comp %>%
   filter(sigPair == TRUE) %>%
   mutate(CpGclass = ifelse(CpG %in% CpGs1, "Mono", "Multi"), 
          AssocClass = ifelse(CpG %in% posNeg, "Both",
-                             ifelse(FC > 0, "Positive", "Negative"))) %>%
+                             ifelse(FC > 0, "Positive", "Inverse"))) %>%
   lm(formula = abs(Distance) ~ CpGclass + AssocClass) %>% anova
 ```
 
@@ -254,19 +265,19 @@ df_comp %>%
 
 The direction of the effect does not depend on the location of the CpG (downstream or upstream).
 
-### Positive vs negative
+### Positive vs Inverse
 
 ```{r}
 df_comp %>% 
   filter(sigPair == TRUE) %>%
-  mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
+  mutate(class = ifelse(FC > 0, "Positive", "Inverse")) %>%
   ggplot(aes(x = log10(abs(FC/10)), color = class)) + geom_density() + 
   theme_bw() + 
   scale_color_discrete(name = "")
 
 df_comp %>% 
   filter(sigPair == TRUE) %>%
-  mutate(class = ifelse(FC > 0, "Positive", "Negative")) %>%
+  mutate(class = ifelse(FC > 0, "Positive", "Inverse")) %>%
   lm(formula = log10(abs(FC)) ~ class) %>% summary
 
 ```
@@ -298,7 +309,7 @@ df_comp %>%
   filter(sigPair == TRUE) %>%
   mutate(CpGclass = ifelse(CpG %in% CpGs1, "Mono", "Multi"), 
          AssocClass = ifelse(CpG %in% posNeg, "Both",
-                             ifelse(FC > 0, "Positive", "Negative"))) %>%
+                             ifelse(FC > 0, "Positive", "Inverse"))) %>%
   ggplot(aes(x = log10(abs(FC)), color = AssocClass)) + geom_density() + 
   theme_bw() + facet_wrap(~CpGclass) + 
   scale_color_discrete(name = "")
@@ -307,7 +318,7 @@ df_comp %>%
   filter(sigPair == TRUE) %>%
   mutate(CpGclass = ifelse(CpG %in% CpGs1, "Mono", "Multi"), 
          AssocClass = ifelse(CpG %in% posNeg, "Both",
-                             ifelse(FC > 0, "Positive", "Negative"))) %>%
+                             ifelse(FC > 0, "Positive", "Inverse"))) %>%
   lm(formula = log10(abs(FC)) ~ CpGclass + AssocClass) %>% anova
 ```
 
@@ -356,7 +367,10 @@ getOR <- function(cols, df){
   t <- data.matrix(df[, cols])
   or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
   p.val <- chisq.test(t)$p.value
-  c(OR = or, p.val = p.val)
+  ORl <- log(or)
+  SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2])
+  c(OR = or, p.val = p.val, ORm = exp(ORl - 1.96*SEl), 
+    ORM = exp(ORl + 1.96*SEl))
 }
 
 g <- function(x, gpos){
@@ -370,20 +384,20 @@ sig <- posSum %>%
   arrange(desc(Type0)) %>%
   g(gpos) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:7) %>%
   mutate(Type = "Significant")
 
 neg <- posSum %>%
-  filter(Direction %in% c("Negative", "Non-significant")) %>%
+  filter(Direction %in% c("Inverse", "Non-significant")) %>%
   group_by(Direction) %>%
   select(ends_with("in"), ends_with("ou")) %>%
   summarize_all(list(sum)) %>%
   g(gpos) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:7) %>%
-  mutate(Type = "Negative")
+  mutate(Type = "Inverse")
 
 pos <- posSum %>%
   filter(Direction %in% c("Positive", "Non-significant")) %>%
@@ -393,7 +407,7 @@ pos <- posSum %>%
   arrange(desc(Direction)) %>%
   g(gpos) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:7) %>%
   mutate(Type = "Positive")
 
@@ -404,23 +418,21 @@ both <- posSum %>%
   summarize_all(list(sum)) %>%
   g(gpos) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:7) %>%
   mutate(Type = "Both")
 
 rbind(sig, neg, pos, both) %>%
   spread(par, Value) %>%
-  mutate(p.val.thres = ifelse(p.val > 0.05, "P > 0.05", 
-                              ifelse(p.val < 1e-3, "P < 0.001", "P < 0.05")),
-         Type = factor(Type, levels = c("Significant", "Negative", "Positive", "Both"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Position with respect gene", 
                    limits = c("TSS1500", "TSS200", "UTR5", "FirstExon", "Body", "UTR3", "Intergenic")) +
-  scale_color_manual(name = "Significance", values = c("black", "grey50", "white")) +
   theme_bw() 
 ```
 
@@ -434,7 +446,7 @@ mono <- posSum %>%
   summarize_all(list(sum)) %>%
   g(gpos) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:7) %>%
   mutate(Type = "Mono")
 
@@ -445,25 +457,22 @@ multi <- posSum %>%
   summarize_all(list(sum)) %>%
   g(gpos) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:7) %>%
   mutate(Type = "Multi")
 
 
 rbind(sig, mono, multi) %>%
   spread(par, Value) %>%
-  mutate(p.val.thres = ifelse(p.val > 0.05, "P > 0.05", 
-                              ifelse(p.val < 1e-3, "P < 0.001", "P < 0.05")),
-         Type = factor(Type, levels = c("Significant", "Mono", "Multi"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  mutate(Type = factor(Type, levels = c("Significant", "Mono", "Multi"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Position with respect gene", 
-                   limits = c("TSS1500", "TSS200", "UTR5", "FirstExon", "Body", "UTR3", "Intergenic")) +
-  scale_color_manual(name = "Significance", values = c("black", "grey50", "white")) +
-  theme_bw() 
+                   limits = c("TSS1500", "TSS200", "UTR5", "FirstExon", "Body", "UTR3", "Intergenic"))
 ```
 
 CpGs associated with gene expression are more frequent in TSS1500, independent of how many TCs they affect. CpGs affecting one gene are less frequent in TSS200 and more frequent in gene body with respect to CpGs not affecting gene expression or changing the expression of different TCs. CpGs affecting several genes are less frequent in First Exon and Body with respect to CpGs not associated with gene expression or with CpGs associated with one TC. 
@@ -489,7 +498,10 @@ getOR <- function(col, df){
   t[, 2] <- t[, 2] - t[, 1]
   or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
   p.val <- chisq.test(t)$p.value
-  c(OR = or, p.val = p.val)
+  ORl <- log(or)
+  SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2])
+  c(OR = or, p.val = p.val, ORm = exp(ORl - 1.96*SEl), 
+    ORM = exp(ORl + 1.96*SEl))
 }
 
 g <- function(x, gpos){
@@ -504,20 +516,20 @@ sigI <- islSum %>%
   arrange(desc(Type0)) %>%
   g(islandStates) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:6) %>%
   mutate(Type = "Significant")
 
 NegI <- islSum %>%
-  filter(Direction %in% c("Negative", "Non-significant")) %>%
+  filter(Direction %in% c("Inverse", "Non-significant")) %>%
   group_by(Direction) %>%
   select(-starts_with("Type")) %>%
   summarize_all(list(sum))  %>%
   g(islandStates) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:6) %>%
-  mutate(Type = "Negative")
+  mutate(Type = "Inverse")
 
 PosI <- islSum %>%
   filter(Direction %in% c("Positive", "Non-significant")) %>%
@@ -527,7 +539,7 @@ PosI <- islSum %>%
   arrange(desc(Direction)) %>%
   g(islandStates) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:6) %>%
   mutate(Type = "Positive")
 
@@ -538,7 +550,7 @@ BothI <- islSum %>%
   summarize_all(list(sum)) %>%
   g(islandStates) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:6) %>%
   mutate(Type = "Both")
 
@@ -548,14 +560,14 @@ rbind(sigI, NegI, PosI, BothI) %>%
   spread(par, Value) %>%
   mutate(p.val.thres = ifelse(p.val > 0.05, "P > 0.05", 
                               ifelse(p.val < 1e-3, "P < 0.001", "P < 0.05")),
-         Type = factor(Type, levels = c("Significant", "Negative", "Positive", "Both"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+         Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
-  scale_y_continuous(trans = "log2", 
+    geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "CpG Island", limits  = islandStates) +
-  scale_color_manual(name = "Significance", values = c("black", "grey50", "white")) +
   theme_bw() 
 ```
 
@@ -569,7 +581,7 @@ monoI <- islSum %>%
   summarize_all(list(sum)) %>%
   g(islandStates) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:6) %>%
   mutate(Type = "Mono")
 
@@ -580,7 +592,7 @@ multiI <- islSum %>%
   summarize_all(list(sum))%>%
   g(islandStates) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:6) %>%
   mutate(Type = "Multi")
 
@@ -589,13 +601,13 @@ rbind(sigI, monoI, multiI) %>%
   mutate(p.val.thres = ifelse(p.val > 0.05, "P > 0.05", 
                               ifelse(p.val < 1e-3, "P < 0.001", "P < 0.05")),
          Type = factor(Type, levels = c("Significant", "Mono", "Multi"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
-  scale_y_continuous(trans = "log2", 
+    geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "CpG Island", limits  = islandStates) +
-  scale_color_manual(name = "Significance", values = c("black", "grey50", "white")) +
   theme_bw() 
 ```
 
@@ -626,9 +638,11 @@ chromSum <- methyAnnot %>%
 ## Define vars and function
 getOR <- function(cols, df){
   t <- data.matrix(df[, cols])
-  or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
+  or <- t[1, 1]/(t[1, 2])/(t[2, 1])*t[2, 2]
   p.val <- chisq.test(t)$p.value
-  c(OR = or, p.val = p.val)
+  ORl <- log(or) 
+  SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2])  
+  c(OR = or, p.val = p.val, ORm = exp(ORl - 1.96*SEl),      ORM = exp(ORl + 1.96*SEl))
 }
 
 g <- function(x, gpos){
@@ -642,20 +656,20 @@ sigC <- chromSum %>%
   arrange(desc(Type0)) %>%
   g(chromStates) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:15) %>%
   mutate(Type = "Significant")
 
 negC <- chromSum %>%
-  filter(Direction %in% c("Negative", "Non-significant")) %>%
+  filter(Direction %in% c("Inverse", "Non-significant")) %>%
   group_by(Direction) %>%
   select(ends_with("sum"), ends_with("sum2")) %>%
   summarize_all(list(sum)) %>%
   g(chromStates) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:15) %>%
-  mutate(Type = "Negative")
+  mutate(Type = "Inverse")
 
 posC <- chromSum %>%
   filter(Direction %in% c("Positive", "Non-significant")) %>%
@@ -665,7 +679,7 @@ posC <- chromSum %>%
   arrange(desc(Direction))%>%
   g(chromStates) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:15) %>%
   mutate(Type = "Positive")
 
@@ -676,7 +690,7 @@ bothC <- chromSum %>%
   summarize_all(list(sum)) %>%
   g(chromStates) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:15) %>%
   mutate(Type = "Both")
 
@@ -686,23 +700,21 @@ rbind(sigC, negC, posC, bothC) %>%
   spread(par, Value) %>%
   mutate(p.val.thres = ifelse(p.val > 0.05, "P > 0.05", 
                               ifelse(p.val < 1e-3, "P < 0.001", "P < 0.05")),
-         Type = factor(Type, levels = c("Significant", "Negative", "Positive", "Both")),
+         Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both")),
                   Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
                         ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
                                ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
                                       ifelse(Region %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", ifelse(Region %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Region))))), 
                         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
-  scale_y_continuous(trans = "log2", 
+    geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Chromatin State") +
-  scale_color_manual(name = "Significance", values = c("black", "grey50", "white")) +     facet_grid(~ Group, scales = "free", space = "free_x") +
-
+   facet_grid(~ Group, scales = "free", space = "free_x") +
   theme_bw() 
-
-
 ```
 
 CpGs associated with gene expression are more frequent in proximal promoters, enhancers and a state associated with zinc finger protein genes but not with region associated with low expression, such as repressed polycomb. CpGs associated negatively and positive and negatively are more frequent than non-associated CpGs in the same regions (Proximal promoters and Enhancers) and they are also less frequent in inactive states (repressed polycomb and quiescent). On the other hand, CpGs associated positively with gene expression were more frequent than non-associated CpGs in inactive regions and less frequent in TxFlnk.
@@ -715,7 +727,7 @@ monoC <- chromSum %>%
   summarize_all(list(sum))  %>%
   g(chromStates) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:15) %>%
   mutate(Type = "Mono")
 
@@ -726,7 +738,7 @@ multiC <- chromSum %>%
   summarize_all(list(sum)) %>%
   g(chromStates) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:15) %>%
   mutate(Type = "Multi")
 
@@ -740,13 +752,14 @@ rbind(sigC, monoC, multiC) %>%
                                ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
                                       ifelse(Region %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", ifelse(Region %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Region))))), 
                         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
-  scale_y_continuous(trans = "log2", 
+    geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Chromatin State") +
-  scale_color_manual(name = "Significance", values = c("black", "grey50", "white")) +     facet_grid(~ Group, scales = "free", space = "free_x") +
+   facet_grid(~ Group, scales = "free", space = "free_x") +
   theme_bw() 
 ```
 
@@ -765,14 +778,15 @@ sigDF <- df %>%
   filter(sigPair == TRUE) %>%
   select(CpG, TC, FC) %>%
   left_join(select(methyAnnot, CpG, UCSC_RefGene_Name, Type, Direction), by = "CpG") %>%
-  left_join(select(expAnnDF, TC, GeneSymbol_Affy), by = "TC")
+  left_join(select(expAnnDF, TC, GeneSymbol_Affy), by = "TC") %>%
+  mutate(GeneAffy = strsplit(GeneSymbol_Affy, ";"))
   
 methGenes <- unique(unlist(sigDF$UCSC_RefGene_Name))
-expGenes <- unique(unlist(strsplit(sigDF$GeneSymbol_Affy, ";")))
+expGenes <- unique(unlist(sigDF$GeneAffy))
 comGenes <- intersect(methGenes, expGenes)
 
 methSel <- sapply(sigDF$UCSC_RefGene_Name, function(x) any(x %in% comGenes))
-expSel <- grepl(paste(comGenes, collapse = "|"), sigDF$GeneSymbol_Affy)
+expSel <- sapply(sigDF$GeneAffy, function(x) any(x %in% comGenes))
 
 sigDF2 <- sigDF[methSel & expSel, ]
 sigDF2
@@ -791,7 +805,7 @@ sigDF2 %>%
   summarise(prop = mean(match)) %>%
   rbind(list("Total", mean(sigDF2$match))) %>%
   ggplot(aes(x = Direction, y = prop*100)) + geom_bar(stat = "identity", fill = "white", color = "black") + 
-  scale_x_discrete(name = "Direction", limits = c("Negative", "Positive", "Both", "Total")) + 
+  scale_x_discrete(name = "Direction", limits = c("Inverse", "Positive", "Both", "Total")) + 
   scale_y_continuous(limits = c(0, 100), name = "Illumina Annotation Match") + theme_bw()
 ```
 
@@ -811,7 +825,7 @@ sigDF2 %>%filter(Type == "Multi") %>%
 
 ```
 
-In CpGs affecting only one gene, Illumina annotation included the affected gene in almost all cases, while in CpGs affecting several genes, Illumina annotation missed some of the associations. Nonetheless, Illumina annotation can predict at least one of the genes affected in 92% of the multi CpGs.
+In CpGs affecting only one gene, Illumina annotation included the affected gene in almost all cases, while in CpGs affecting several genes, Illumina annotation missed some of the associations. Nonetheless, Illumina annotation can predict at least one of the genes affected in 84% of the multi CpGs.
 
 # Age 
 
@@ -843,7 +857,9 @@ getOR <- function(col, df){
   t[, 2] <- t[, 2] - t[, 1]
   or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
   p.val <- chisq.test(t)$p.value
-  c(OR = or, p.val = p.val)
+  ORl <- log(or)  
+  SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2]) 
+  c(OR = or, p.val = p.val, ORm = exp(ORl - 1.96*SEl),      ORM = exp(ORl + 1.96*SEl))
 }
 
 g <- function(x, gpos){
@@ -857,20 +873,20 @@ sigA <- ageSum %>%
   arrange(desc(Type0)) %>%
   g(ageG) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:3) %>%
   mutate(Type = "Significant")
 
 negA <- ageSum %>%
-  filter(Direction %in% c("Negative", "Non-significant")) %>%
+  filter(Direction %in% c("Inverse", "Non-significant")) %>%
   group_by(Direction) %>%
   select(-starts_with("Type")) %>%
   summarize_all(list(sum)) %>%
   g(ageG) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:3) %>%
-  mutate(Type = "Negative")
+  mutate(Type = "Inverse")
 
 
 posA <- ageSum %>%
@@ -881,7 +897,7 @@ posA <- ageSum %>%
   arrange(desc(Direction)) %>%
   g(ageG) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:3) %>%
   mutate(Type = "Positive")
 
@@ -892,7 +908,7 @@ bothA <- ageSum %>%
   summarize_all(list(sum)) %>%
   g(ageG) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:3) %>%
   mutate(Type = "Both")
 
@@ -900,16 +916,14 @@ bothA <- ageSum %>%
 
 rbind(sigA, negA, posA, bothA) %>%
   spread(par, Value) %>%
-  mutate(p.val.thres = ifelse(p.val > 0.05, "P > 0.05", 
-                              ifelse(p.val < 1e-3, "P < 0.001", "P < 0.05")),
-         Type = factor(Type, levels = c("Significant", "Negative", "Positive", "Both"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
-  scale_y_continuous(trans = "log2", 
+    geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Change Direction") +
-  scale_color_manual(name = "Significance", values = c("black", "grey50", "white")) +    
   theme_bw() 
 ```
 
@@ -926,7 +940,7 @@ monoA <- ageSum %>%
   summarize_all(list(sum)) %>%
   g(ageG) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:3) %>%
   mutate(Type = "Mono")
 
@@ -937,7 +951,7 @@ multiA <- ageSum %>%
   summarize_all(list(sum))  %>%
   g(ageG) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:3) %>%
   mutate(Type = "Multi")
 
@@ -945,16 +959,14 @@ multiA <- ageSum %>%
 
 rbind(sigA, monoA, multiA) %>%
   spread(par, Value) %>%
-  mutate(p.val.thres = ifelse(p.val > 0.05, "P > 0.05", 
-                              ifelse(p.val < 1e-3, "P < 0.001", "P < 0.05")),
-         Type = factor(Type, levels = c("Significant", "Mono", "Multi"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  mutate(Type = factor(Type, levels = c("Significant", "Mono", "Multi"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
-  scale_y_continuous(trans = "log2", 
+    geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Change Direction") +
-  scale_color_manual(name = "Significance", values = c("black", "grey50", "white")) +    
   theme_bw() 
 ```
 
@@ -997,13 +1009,13 @@ herm %>%
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
   ggtitle("Total Heritability vs CpG direction") +
   scale_x_discrete(name = "Association Direction", 
-                   limits = c("Negative", "Positive", "Both", "Non-significant")) +
+                   limits = c("Inverse", "Positive", "Both", "Non-significant")) +
   scale_y_continuous(name = "h2", limits = c(0, 1)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
 
-herm$Direction <- factor(herm$Direction, levels = c("Non-significant", "Negative", "Positive", "Both"))
+herm$Direction <- factor(herm$Direction, levels = c("Non-significant", "Inverse", "Positive", "Both"))
                          
 summary(lm(h2_total ~ Direction , herm) )
 
@@ -1021,7 +1033,7 @@ herm %>%
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
   ggtitle("SNP Heritability vs CpG direction") +
   scale_x_discrete(name = "Association Direction", 
-                   limits = c("Negative", "Positive", "Both", "Non-significant")) +
+                   limits = c("Inverse", "Positive", "Both", "Non-significant")) +
   scale_y_continuous(name = "h2", limits = c(0, 1)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
@@ -1110,9 +1122,11 @@ eff <- c("Changed", "Exposure", "Outcome")
 ## Define vars and function
 getOR <- function(cols, df){
   t <- data.matrix(df[, cols])
-  or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
+  or <- t[1, 1]/(t[1, 2])/(t[2, 1])*t[2, 2]
   p.val <- chisq.test(t)$p.value
-  c(OR = or, p.val = p.val)
+  ORl <- log(or)  
+  SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2]) 
+  c(OR = or, p.val = p.val, ORm = exp(ORl - 1.96*SEl),      ORM = exp(ORl + 1.96*SEl))
 }
 
 g <- function(x, gpos){
@@ -1126,21 +1140,21 @@ sigE <- ewasSum %>%
   arrange(desc(Type0)) %>%
   g(eff) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:3) %>%
   mutate(Type = "Significant")
 
 
 negE <- ewasSum %>%
-  filter(Direction %in% c("Negative", "Non-significant")) %>%
+  filter(Direction %in% c("Inverse", "Non-significant")) %>%
   group_by(Direction) %>%
   select(ends_with("in"), ends_with("ou")) %>%
   summarize_all(list(sum)) %>%
   g(eff) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:3) %>%
-  mutate(Type = "Negative")
+  mutate(Type = "Inverse")
 
 posE <- ewasSum %>%
   filter(Direction %in% c("Positive", "Non-significant")) %>%
@@ -1150,7 +1164,7 @@ posE <- ewasSum %>%
   arrange(desc(Direction)) %>%
   g(eff) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:3) %>%
   mutate(Type = "Positive")
 
@@ -1161,23 +1175,21 @@ bothE <- ewasSum %>%
   summarize_all(list(sum)) %>%
   g(eff) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:3) %>%
   mutate(Type = "Both")
 
 rbind(sigE, negE, posE, bothE) %>%
   spread(par, Value) %>%
-  mutate(p.val.thres = ifelse(p.val > 0.05, "P > 0.05", 
-                              ifelse(p.val < 1e-3, "P < 0.001", "P < 0.05")),
-         Type = factor(Type, levels = c("Significant", "Negative", "Positive", "Both"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
-  scale_y_continuous(trans = "log2", 
+    geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Effect in EWAS catalogue", 
                    limits = eff) +
-  scale_color_manual(name = "Significance", values = c("black", "grey50", "white")) +
   theme_bw() 
 
 ```
@@ -1194,7 +1206,7 @@ monoE <- ewasSum %>%
   summarize_all(list(sum)) %>%
   g(eff) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:3) %>%
   mutate(Type = "Mono")
 
@@ -1205,24 +1217,22 @@ multiE <- ewasSum %>%
   summarize_all(list(sum)) %>%
   g(eff) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:3) %>%
   mutate(Type = "Multi")
 
 
 rbind(sigE, monoE, multiE) %>%
   spread(par, Value) %>%
-  mutate(p.val.thres = ifelse(p.val > 0.05, "P > 0.05", 
-                              ifelse(p.val < 1e-3, "P < 0.001", "P < 0.05")),
-         Type = factor(Type, levels = c("Significant", "Mono", "Multi"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  mutate(Type = factor(Type, levels = c("Significant", "Mono", "Multi"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
-  scale_y_continuous(trans = "log2", 
+    geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Effect in EWAS catalogue", 
                    limits = eff) +
-  scale_color_manual(name = "Significance", values = c("black", "grey50", "white")) +
   theme_bw() 
 
 ```
@@ -1291,7 +1301,9 @@ getOR <- function(cols, df){
   t <- data.matrix(df[, cols])
   or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
   p.val <- chisq.test(t)$p.value
-  c(OR = or, p.val = p.val)
+  ORl <- log(or)
+  SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2])
+  c(OR = or, p.val = p.val, ORm = exp(ORl - 1.96*SEl),      ORM = exp(ORl + 1.96*SEl))
 }
 
 g <- function(x, gpos){
@@ -1305,21 +1317,21 @@ sigAt <- atlasSum %>%
   arrange(desc(Type0)) %>%
   g(eff) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:6) %>%
   mutate(Type = "Significant")
 
 
 negAt <- atlasSum %>%
-  filter(Direction %in% c("Negative", "Non-significant")) %>%
+  filter(Direction %in% c("Inverse", "Non-significant")) %>%
   group_by(Direction) %>%
   select(ends_with("in"), ends_with("ou")) %>%
   summarize_all(list(sum)) %>%
   g(eff) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:6) %>%
-  mutate(Type = "Negative")
+  mutate(Type = "Inverse")
 
 posAt <- atlasSum %>%
   filter(Direction %in% c("Positive", "Non-significant")) %>%
@@ -1329,7 +1341,7 @@ posAt <- atlasSum %>%
   arrange(desc(Direction)) %>%
   g(eff) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:6) %>%
   mutate(Type = "Positive")
 
@@ -1340,23 +1352,21 @@ bothAt <- atlasSum %>%
   summarize_all(list(sum)) %>%
   g(eff) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:6) %>%
   mutate(Type = "Both")
 
 rbind(sigAt, negAt, posAt, bothAt) %>%
   spread(par, Value) %>%
-  mutate(p.val.thres = ifelse(p.val > 0.05, "P > 0.05", 
-                              ifelse(p.val < 1e-3, "P < 0.001", "P < 0.05")),
-         Type = factor(Type, levels = c("Significant", "Negative", "Positive", "Both"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
-  scale_y_continuous(trans = "log2", 
+    geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Effect in EWAS Atlas", 
                    limits = eff) +
-  scale_color_manual(name = "Significance", values = c("black", "grey50", "white")) +
   theme_bw() 
 ```
 
@@ -1370,7 +1380,7 @@ monoAt <- atlasSum %>%
   summarize_all(list(sum)) %>%
   g(eff) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:6) %>%
   mutate(Type = "Mono")
 
@@ -1381,24 +1391,22 @@ multiAt <- atlasSum %>%
   summarize_all(list(sum)) %>%
   g(eff) %>%
   as_tibble() %>%
-  mutate(par = c("OR", "p.val")) %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
   gather("Region", "Value", 1:6) %>%
   mutate(Type = "Multi")
 
 
 rbind(sigAt, monoAt, multiAt) %>%
   spread(par, Value) %>%
-  mutate(p.val.thres = ifelse(p.val > 0.05, "P > 0.05", 
-                              ifelse(p.val < 1e-3, "P < 0.001", "P < 0.05")),
-         Type = factor(Type, levels = c("Significant", "Mono", "Multi"))) %>%
-  ggplot(aes(x = Region, y = OR, col = p.val.thres, fill = Type)) + 
+  mutate(Type = factor(Type, levels = c("Significant", "Mono", "Multi"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
-  scale_y_continuous(trans = "log2", 
+    geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Effect in EWAS catalogue", 
-                   limits = eff) +
-  scale_color_manual(name = "Significance", values = c("black", "grey50", "white")) +
+                   limits = eff)+
   theme_bw() 
 
 ```
@@ -1454,7 +1462,7 @@ We next tested in what pathways are enriched the genes affected by the different
 
 ```{r}
 negGenes <- methyAnnot %>%
-  filter(Direction == "Negative") %>%
+  filter(Direction == "Inverse") %>%
   select(CpG) %>%
   inner_join(filter(df, sigPair == TRUE), by = "CpG") %>%
   inner_join(expAnnDF, by = "TC") %>%
@@ -1487,10 +1495,10 @@ bothGenes <- methyAnnot %>%
   unique()
 bothGenesENT <- bitr(bothGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
 
-upset(fromList(list(Negative = negGenes, Positive = posGenes,
+upset(fromList(list(Inverse = negGenes, Positive = posGenes,
                     Both = bothGenes)), order.by = "freq")
 
-## Negative
+## Inverse
 enNeg <- showEnrichments(negGenesENT$ENTREZID)
 
 ## Positive
