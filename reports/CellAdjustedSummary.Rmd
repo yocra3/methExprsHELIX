@@ -365,7 +365,7 @@ posSum <- methyAnnot %>%
 gpos <- c("Intergenic", "TSS1500", "TSS200", "UTR5", "FirstExon", "Body", "UTR3")
 getOR <- function(cols, df){
   t <- data.matrix(df[, cols])
-  or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
+  or <- t[1, 1]/(t[1, 2])/(t[2, 1])*t[2, 2]
   p.val <- chisq.test(t)$p.value
   ORl <- log(or)
   SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2])
@@ -496,7 +496,7 @@ islSum <- methyAnnot %>%
 getOR <- function(col, df){
   t <- data.matrix(df[, c(col, colnames(df)[ncol(df)])])
   t[, 2] <- t[, 2] - t[, 1]
-  or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
+  or <- t[1, 1]/(t[1, 2])/(t[2, 1])*t[2, 2]
   p.val <- chisq.test(t)$p.value
   ORl <- log(or)
   SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2])
@@ -855,7 +855,7 @@ ageG <- c("Changed", "Decreasing", "Increasing")
 getOR <- function(col, df){
   t <- data.matrix(df[, c(col, colnames(df)[ncol(df)])])
   t[, 2] <- t[, 2] - t[, 1]
-  or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
+  or <- t[1, 1]/(t[1, 2])/(t[2, 1])*t[2, 2]
   p.val <- chisq.test(t)$p.value
   ORl <- log(or)  
   SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2]) 
@@ -1299,7 +1299,7 @@ eff <- c("Changed", "Behavior", "Disease", "Environment", "Cancer", "Phenotype")
 ## Define vars and function
 getOR <- function(cols, df){
   t <- data.matrix(df[, cols])
-  or <- t[1, 1]*t[2, 2]/(t[1, 2]*t[2, 1])
+  or <- t[1, 1]/(t[1, 2])/(t[2, 1])*t[2, 2]
   p.val <- chisq.test(t)$p.value
   ORl <- log(or)
   SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2])

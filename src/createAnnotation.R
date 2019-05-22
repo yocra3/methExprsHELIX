@@ -44,6 +44,7 @@ save(methyAnnot, file = "results/preprocessFiles/methyAnnotation.Rdata")
 load("results/preprocessFiles/Expression_SE_residuals.RData")
 annot <- read.csv("/home/isglobal.lan/cruiz/data/WS_HELIX/HELIX_preproc/gene_expression/annotation/HTA-2_0.na36.hg19.transcript.csv", comment.char="#", as.is = TRUE)
 
+### Mark as coding those TC having data in Swiss-Prot
 expAnnot <- annot %>%
   as_tibble() %>%
   right_join(as_tibble(mcols(rowRanges(se))[, c(1, 7:11)]), by = "transcript_cluster_id") %>%
