@@ -778,14 +778,15 @@ sigDF <- df %>%
   filter(sigPair == TRUE) %>%
   select(CpG, TC, FC) %>%
   left_join(select(methyAnnot, CpG, UCSC_RefGene_Name, Type, Direction), by = "CpG") %>%
-  left_join(select(expAnnDF, TC, GeneSymbol_Affy), by = "TC")
+  left_join(select(expAnnDF, TC, GeneSymbol_Affy), by = "TC") %>%
+  mutate(GeneAffy = strsplit(GeneSymbol_Affy, ";"))
   
 methGenes <- unique(unlist(sigDF$UCSC_RefGene_Name))
-expGenes <- unique(unlist(strsplit(sigDF$GeneSymbol_Affy, ";")))
+expGenes <- unique(unlist(sigDF$GeneAffy))
 comGenes <- intersect(methGenes, expGenes)
 
 methSel <- sapply(sigDF$UCSC_RefGene_Name, function(x) any(x %in% comGenes))
-expSel <- grepl(paste(comGenes, collapse = "|"), sigDF$GeneSymbol_Affy)
+expSel <- sapply(sigDF$GeneAffy, function(x) any(x %in% comGenes))
 
 sigDF2 <- sigDF[methSel & expSel, ]
 sigDF2
@@ -824,7 +825,7 @@ sigDF2 %>%filter(Type == "Multi") %>%
 
 ```
 
-In CpGs affecting only one gene, Illumina annotation included the affected gene in almost all cases, while in CpGs affecting several genes, Illumina annotation missed some of the associations. Nonetheless, Illumina annotation can predict at least one of the genes affected in 92% of the multi CpGs.
+In CpGs affecting only one gene, Illumina annotation included the affected gene in almost all cases, while in CpGs affecting several genes, Illumina annotation missed some of the associations. Nonetheless, Illumina annotation can predict at least one of the genes affected in 84% of the multi CpGs.
 
 # Age 
 
