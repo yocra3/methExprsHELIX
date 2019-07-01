@@ -50,6 +50,20 @@ We found `r length(sigFU)` CpGs affecting gene expression with model U and `r le
 
 # Compare pairs
 
+
+```{r, dev='Cairo_png'}
+sigPU <- filter(modU, sigPair) %>%
+  mutate(pair = paste0(CpG, TC)) %>%
+  `$`(., "pair")
+sigPC <- filter(modC, sigPair) %>%
+  mutate(pair = paste0(CpG, TC)) %>%
+  `$`(., "pair")
+sigPCom <- intersect(sigPU, sigPC)
+upset(fromList(list(Adjusted = sigPU, "Adjusted+Cells" = sigPC)), 
+      order.by = "freq")
+```
+
+
 ## Merge datasets
 
 We will create a merged dataset with the estimates for both models. We will restrict the comparison to those CpG-TC pairs found significant in at least one of the models. 
