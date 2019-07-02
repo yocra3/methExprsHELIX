@@ -26,6 +26,7 @@ library(dplyr)
 library(cowplot)
 library(tidyr)
 library(UpSetR)
+library(hta20transcriptcluster.db)
 
 load("results/MethComBatExpResidualsNoCellAdj/allres_simP_cpgs.Rdata")
 load("results/preprocessFiles/allOverlaps.Rdata")
@@ -1421,43 +1422,46 @@ In this section, we run enrichment analyses with the genes affected by the CpGs 
 First, we tested whether the genes regulated by DNA methylation are enriched in some pathways.
 
 ```{r}
-library(hta20transcriptcluster.db)
 allGenes <- df %>%
   group_by(TC) %>%
   summarize(sig = factor(ifelse(any(sigPair), 1, 0)))
 
-allGenesv <- allGenes$sig
-names(allGenesv) <- allGenes$TC
-
-
-
-allData <- new("topGOdata", 
+computeGOs <- function(df){
+  
+  genesv <- df$sig
+  names(genesv) <- df$TC
+  
+  Data <- new("topGOdata", 
               description = "GO analysis of TCs",
               ontology = "BP",
-              allGenes = allGenesv,
+              allGenes = genesv,
               annot = annFUN.db,
               nodeSize = 100,
               affyLib = "hta20transcriptcluster.db")
+  
+  class <- runTest(Data, algorithm = "classic", statistic = "fisher")
+  elim <- runTest(Data, algorithm = "elim", statistic = "fisher")
+  weigth <- runTest(Data, algorithm = "weight", statistic = "fisher")
+  mixed <- runTest(Data, algorithm = "weight01", statistic = "fisher")
+  
+  
+  finTab <- GenTable(Data, 
+                     classic = class, 
+                     Elim = elim, 
+                     weight = weigth, 
+                     w0 = mixed,
+                     orderBy = "weight",
+                     ranksOf = "classic",
+                     topNodes = length(score(class)))
+  gos <- list(classic = class, elim = elim,
+              weigth = weigth, 
+              mixed = mixed)
+  list(gos = gos, table = finTab)
+}
+allGos <- computeGOs(allGenes)
 
-allClass <- runTest(allData, algorithm = "classic", statistic = "fisher")
-allElim <- runTest(allData, algorithm = "elim", statistic = "fisher")
-allWeigth <- runTest(allData, algorithm = "weight", statistic = "fisher")
-allMixed <- runTest(allData, algorithm = "weight01", statistic = "fisher")
 
-
-allRes <- GenTable(allData, classic = allClass, Elim = allElim, 
-                   weight = allWeigth, w0 = allMixed,
-                   orderBy = "weight", ranksOf = "classic",
-                   topNodes = 2074)
-allRes.sel <- allRes %>%
-  as_tibble() %>%
-  filter(classic < 0.01 & Elim < 0.01 & weight < 0.01 & w0 < 0.01)
-
-
-showSigOfNodes(allData, score(allClass), firstSigNodes = 15, useInfo = 'all')
-showSigOfNodes(allData, score(allElim), firstSigNodes = 5, useInfo = 'all')
-showSigOfNodes(allData, score(allWeigth), firstSigNodes = 5, useInfo = 'all')
-showSigOfNodes(allData, score(allMixed), firstSigNodes = 5, useInfo = 'all')
+# showSigOfNodes(allData, score(allClass), firstSigNodes = 15, useInfo = 'all')
 ```
 
 Genes affected by methylation are enriched in GO terms and KEGG pathways related with the immune system. 
@@ -1467,71 +1471,31 @@ We next tested in what pathways are enriched the genes affected by the different
 ## Direction
 
 ```{r}
+invCpGs <- filter(CpGsSum, Direction == "Inverse")$CpG
+
 negGenes <- df %>%
   group_by(TC) %>%
-  summarize(sig = factor(ifelse(any(sigPair), 1, 0)))
+  summarize(sig = factor(
+    ifelse(any(CpG %in% invCpGs), 1, 0)))
+invGOs <- computeGOs(negGenes)
 
-allGenesv <- allGenes$sig
-names(allGenesv) <- allGenes$TC
+posCpGs <- filter(CpGsSum, Direction == "Positive")$CpG
 
-
-
-allData <- new("topGOdata", 
-              description = "GO analysis of TCs",
-              ontology = "BP",
-              allGenes = allGenesv,
-              annot = annFUN.db,
-              nodeSize = 100,
-              affyLib = "hta20transcriptcluster.db")
-
-allClass <- runTest(allData, algorithm = "classic", statistic = "fisher")
-allElim <- runTest(allData, algorithm = "elim", statistic = "fisher")
-allWeigth <- runTest(allData, algorithm = "weight", statistic = "fisher")
-allMixed <- runTest(allData, algorithm = "weight01", statistic = "fisher")
+posGenes <- df %>%
+  group_by(TC) %>%
+  summarize(sig = factor(
+    ifelse(any(CpG %in% posCpGs), 1, 0)))
+posGOs <- computeGOs(posGenes)
 
 
-allRes <- GenTable(allData, classic = allClass, Elim = allElim, 
-                   weight = allWeigth, w0 = allMixed,
-                   orderBy = "weight", ranksOf = "classic",
-                   topNodes = 2074)
-allRes.sel <- allRes %>%
-  as_tibble() %>%
-  filter(classic < 0.01 & Elim < 0.01 & weight < 0.01 & w0 < 0.01)
+bothCpGs <- filter(CpGsSum, Direction == "Both")$CpG
 
+bothGenes <- df %>%
+  group_by(TC) %>%
+  summarize(sig = factor(
+    ifelse(any(CpG %in% bothCpGs), 1, 0)))
+bothGOs <- computeGOs(bothGenes)
 
-posGenes <- methyAnnot %>%
-  filter(Direction == "Positive") %>%
-  select(CpG) %>%
-  inner_join(filter(df, sigPair == TRUE), by = "CpG") %>%
-  inner_join(expAnnDF, by = "TC") %>%
-  `$`("GeneSymbol_Affy") %>%
-  strsplit(., split = ";") %>%
-  unlist() %>%
-  unique()
-posGenesENT <- bitr(posGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
-
-bothGenes <- methyAnnot %>%
-  filter(Direction == "Both") %>%
-  select(CpG) %>%
-  inner_join(filter(df, sigPair == TRUE), by = "CpG") %>%
-  inner_join(expAnnDF, by = "TC") %>%
-  `$`("GeneSymbol_Affy") %>%
-  strsplit(., split = ";") %>%
-  unlist() %>%
-  unique()
-bothGenesENT <- bitr(bothGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
-
-upset(fromList(list(Inverse = negGenes, Positive = posGenes,
-                    Both = bothGenes)), order.by = "freq")
-
-## Inverse
-enNeg <- showEnrichments(negGenesENT$ENTREZID)
-
-## Positive
-enPos <- showEnrichments(posGenesENT$ENTREZID)
-
-## Both
-enBoth <- showEnrichments(bothGenesENT$ENTREZID)
 ```
 
 CpGs regulating negatively gene expression affect to a higher number of genes. Thus, a high number of the genes affected by negative CpGs are exclusive of this group. Positive and both CpGs affect genes that are shared with other groups. 
@@ -1541,37 +1505,21 @@ In general, all type of CpGs regulate genes associated with immune function. Gen
 ## Type
 
 ```{r}
-monoGenes <- methyAnnot %>%
-  filter(Type == "Mono") %>%
-  select(CpG) %>%
-  inner_join(filter(df, sigPair == TRUE), by = "CpG") %>%
-  inner_join(expAnnDF, by = "TC") %>%
-  `$`("GeneSymbol_Affy") %>%
-  strsplit(., split = ";") %>%
-  unlist() %>%
-  unique()
-monoGenesENT <- bitr(monoGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
+monoCpGs <- filter(CpGsSum, Type == "Mono")$CpG
 
+monoGenes <- df %>%
+  group_by(TC) %>%
+  summarize(sig = factor(
+    ifelse(any(CpG %in% monoCpGs), 1, 0)))
+monoGOs <- computeGOs(monoGenes)
 
-multiGenes <- methyAnnot %>%
-  filter(Type == "Multi") %>%
-  select(CpG) %>%
-  inner_join(filter(df, sigPair == TRUE), by = "CpG") %>%
-  inner_join(expAnnDF, by = "TC") %>%
-  `$`("GeneSymbol_Affy") %>%
-  strsplit(., split = ";") %>%
-  unlist() %>%
-  unique()
-multiGenesENT <- bitr(multiGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
+multiCpGs <- filter(CpGsSum, Type == "Multi")$CpG
 
-upset(fromList(list(Mono = monoGenes, Multi = multiGenes)),
-      order.by = "freq")
-
-## Mono
-enMono <- showEnrichments(monoGenesENT$ENTREZID)
-
-## Multi
-enMulti <- showEnrichments(multiGenesENT$ENTREZID)
+multiGenes <- df %>%
+  group_by(TC) %>%
+  summarize(sig = factor(
+    ifelse(any(CpG %in% multiCpGs), 1, 0)))
+multiGOs <- computeGOs(multiGenes)
 ```
 
 CpGs regulating the expression of one gene affect to a higher number of genes. We observe little overlap between the genes regulated by these different types of CpGs. 
