@@ -874,7 +874,7 @@ multiM <- methSum %>%
   g(methStates) %>%
   as_tibble() %>%
   mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", 1:4) %>%
+  gather("Region", "Value", 1:3) %>%
   mutate(Type = "Multi")
 
 rbind(sigM, monoM, multiM) %>%
