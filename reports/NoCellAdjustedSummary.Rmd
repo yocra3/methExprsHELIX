@@ -218,7 +218,6 @@ df_comp %>%
 
 When evaluting both factors at the same time, we get the same conclussions: CpGs inversely associated with gene expression that only change expression of one gene are closer to the TC than CpGs changing positively gene expression in more than one gene. 
 
-
 # Effect size
 
 ### Effect size vs association
@@ -764,6 +763,136 @@ scale_y_continuous(trans = "log2",
 ```
 
 CpGs associated with gene expression are more frequent in the same states, independent of the number of TCs they are associated with. The main differences that we observed were that CpGs that are associated with different TCs tend to be more frequent in ZNF regions and in bivalent regulatory states. 
+## CpG methylation 
+
+Next, we tested whether CpGs associated with gene expression were located in specific position with respect to genes.
+
+```{r}
+## Create summary tibble
+methSum <- methyAnnot %>% 
+  group_by(Type, Direction, median_cat) %>%
+  summarize(n = n()) %>%
+  spread(median_cat, n) %>%
+  mutate(Type0 = ifelse(Type == "Non-significant", "Non-significant", "Significant"), 
+         tot = sum(high, medium, low))
+
+  
+  
+methStates <- c("high", "medium", "low")
+
+## Define vars and function
+getOR <- function(col, df){
+  t <- data.matrix(df[, c(col, colnames(df)[ncol(df)])])
+  t[, 2] <- t[, 2] - t[, 1]
+  or <- t[1, 1]/(t[1, 2])/(t[2, 1])*t[2, 2]
+  p.val <- chisq.test(t)$p.value
+  ORl <- log(or)
+  SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2])
+  c(OR = or, p.val = p.val, ORm = exp(ORl - 1.96*SEl), 
+    ORM = exp(ORl + 1.96*SEl))
+}
+
+g <- function(x, gpos){
+  sapply(gpos, function(y) getOR(y, df = x))
+}
+
+sigM <- methSum %>%
+  group_by(Type0) %>%
+  select(-c(1:2)) %>%
+  summarize_all(list(sum)) %>%
+  arrange(desc(Type0)) %>%
+  g(methStates) %>%
+  as_tibble() %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+  gather("Region", "Value", 1:3) %>%
+  mutate(Type = "Significant")
+
+NegM <- methSum %>%
+  filter(Direction %in% c("Inverse", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum))  %>%
+  g(methStates) %>%
+  as_tibble() %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+  gather("Region", "Value", 1:3) %>%
+  mutate(Type = "Inverse")
+
+PosM <- methSum %>%
+  filter(Direction %in% c("Positive", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum))  %>%
+  g(methStates) %>%
+  as_tibble() %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+  gather("Region", "Value", 1:3) %>%
+  mutate(Type = "Positive")
+
+BothM <- methSum %>%
+  filter(Direction %in% c("Both", "Non-significant")) %>%
+  group_by(Direction) %>%
+  select(-starts_with("Type")) %>%
+  summarize_all(list(sum))  %>%
+  g(methStates) %>%
+  as_tibble() %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+  gather("Region", "Value", 1:3) %>%
+  mutate(Type = "Both")
+
+rbind(sigM, NegM, PosM, BothM) %>%
+  spread(par, Value) %>%
+  mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
+  geom_bar(stat = "identity", position=position_dodge()) + 
+    geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "Methylation Levels", limits  = methStates) +
+  theme_bw() 
+```
+
+CpGs associated with gene expression are enriched in CpGs with medium methylation. Low methylation CpGs are depleted in CpGs regulating gene expression, but for CpGs regulating positively. 
+```{r}
+monoM <- methSum %>%
+  filter(Type %in% c("Mono", "Non-significant")) %>%
+  group_by(Type) %>%
+  select(-c(2, 6)) %>%
+  summarize_all(list(sum)) %>%
+  g(methStates) %>%
+  as_tibble() %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+  gather("Region", "Value", 1:3) %>%
+  mutate(Type = "Mono")
+
+multiM <- methSum %>%
+  filter(Type %in% c("Multi", "Non-significant")) %>%
+  group_by(Type) %>%
+  select(-c(2, 6)) %>%
+  summarize_all(list(sum))%>%
+  g(methStates) %>%
+  as_tibble() %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+  gather("Region", "Value", 1:4) %>%
+  mutate(Type = "Multi")
+
+rbind(sigM, monoM, multiM) %>%
+  spread(par, Value) %>%
+  mutate(Type = factor(Type, levels = c("Significant", "Mono", "Multi"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
+  geom_bar(stat = "identity", position=position_dodge()) + 
+    geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "CpG Island", limits  = methStates) +
+  theme_bw() 
+```
+
+When comparing CpGs by the number of TCs they change, we do not observe any differences. 
+
+
 
 # Illumina annotation comparison
 
@@ -1422,10 +1551,6 @@ In this section, we run enrichment analyses with the genes affected by the CpGs 
 First, we tested whether the genes regulated by DNA methylation are enriched in some pathways.
 
 ```{r}
-allGenes <- df %>%
-  group_by(TC) %>%
-  summarize(sig = factor(ifelse(any(sigPair), 1, 0)))
-
 computeGOs <- function(df){
   
   genesv <- df$sig
@@ -1436,7 +1561,7 @@ computeGOs <- function(df){
               ontology = "BP",
               allGenes = genesv,
               annot = annFUN.db,
-              nodeSize = 100,
+              nodeSize = 10,
               affyLib = "hta20transcriptcluster.db")
   
   class <- runTest(Data, algorithm = "classic", statistic = "fisher")
@@ -1447,17 +1572,21 @@ computeGOs <- function(df){
   
   finTab <- GenTable(Data, 
                      classic = class, 
-                     Elim = elim, 
+                     elim = elim, 
                      weight = weigth, 
                      w0 = mixed,
                      orderBy = "weight",
-                     ranksOf = "classic",
+                     ranksOf = "elim",
                      topNodes = length(score(class)))
   gos <- list(classic = class, elim = elim,
               weigth = weigth, 
               mixed = mixed)
   list(gos = gos, table = finTab)
 }
+allGenes <- df %>%
+  group_by(TC) %>%
+  summarize(sig = factor(ifelse(any(sigPair), 1, 0)))
+
 allGos <- computeGOs(allGenes)
 
 
@@ -1476,7 +1605,7 @@ invCpGs <- filter(CpGsSum, Direction == "Inverse")$CpG
 negGenes <- df %>%
   group_by(TC) %>%
   summarize(sig = factor(
-    ifelse(any(CpG %in% invCpGs), 1, 0)))
+    ifelse(any(CpG %in% invCpGs & sigPair), 1, 0)))
 invGOs <- computeGOs(negGenes)
 
 posCpGs <- filter(CpGsSum, Direction == "Positive")$CpG
@@ -1484,7 +1613,7 @@ posCpGs <- filter(CpGsSum, Direction == "Positive")$CpG
 posGenes <- df %>%
   group_by(TC) %>%
   summarize(sig = factor(
-    ifelse(any(CpG %in% posCpGs), 1, 0)))
+    ifelse(any(CpG %in% posCpGs & sigPair), 1, 0)))
 posGOs <- computeGOs(posGenes)
 
 
@@ -1493,7 +1622,7 @@ bothCpGs <- filter(CpGsSum, Direction == "Both")$CpG
 bothGenes <- df %>%
   group_by(TC) %>%
   summarize(sig = factor(
-    ifelse(any(CpG %in% bothCpGs), 1, 0)))
+    ifelse(any(CpG %in% bothCpGs & sigPair), 1, 0)))
 bothGOs <- computeGOs(bothGenes)
 
 ```
@@ -1510,7 +1639,7 @@ monoCpGs <- filter(CpGsSum, Type == "Mono")$CpG
 monoGenes <- df %>%
   group_by(TC) %>%
   summarize(sig = factor(
-    ifelse(any(CpG %in% monoCpGs), 1, 0)))
+    ifelse(any(CpG %in% monoCpGs & sigPair), 1, 0)))
 monoGOs <- computeGOs(monoGenes)
 
 multiCpGs <- filter(CpGsSum, Type == "Multi")$CpG
@@ -1518,7 +1647,7 @@ multiCpGs <- filter(CpGsSum, Type == "Multi")$CpG
 multiGenes <- df %>%
   group_by(TC) %>%
   summarize(sig = factor(
-    ifelse(any(CpG %in% multiCpGs), 1, 0)))
+    ifelse(any(CpG %in% multiCpGs & sigPair), 1, 0)))
 multiGOs <- computeGOs(multiGenes)
 ```
 
@@ -1530,51 +1659,27 @@ CpGs regulating one genes regulate genes involved in innate immunity while CpGs 
 ## Age effect
 
 ```{r}
-changeGenes <- methyAnnot %>%
-  filter(CpG %in% agedf$ILMNID) %>%
-  select(CpG) %>%
-  inner_join(filter(df, sigPair == TRUE), by = "CpG") %>%
-  inner_join(expAnnDF, by = "TC") %>%
-  `$`("GeneSymbol_Affy") %>%
-  strsplit(., split = ";") %>%
-  unlist() %>%
-  unique()
-changeGenesENT <- bitr(changeGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
-
-incGenes <- methyAnnot %>%
-  filter(CpG %in% filter(agedf, Dir == "Increasing")$ILMNID)  %>%
-  select(CpG) %>%
-  inner_join(filter(df, sigPair == TRUE), by = "CpG") %>%
-  inner_join(expAnnDF, by = "TC") %>%
-  `$`("GeneSymbol_Affy") %>%
-  strsplit(., split = ";") %>%
-  unlist() %>%
-  unique()
-incGenesENT <- bitr(incGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
-
-decGenes <- methyAnnot %>%
-  filter(CpG %in% filter(agedf, Dir == "Decreasing")$ILMNID)  %>%
-  select(CpG) %>%
-  inner_join(filter(df, sigPair == TRUE), by = "CpG") %>%
-  inner_join(expAnnDF, by = "TC") %>%
-  `$`("GeneSymbol_Affy") %>%
-  strsplit(., split = ";") %>%
-  unlist() %>%
-  unique()
-decGenesENT <- bitr(decGenes, fromType="SYMBOL", toType = "ENTREZID", OrgDb="org.Hs.eg.db")
+ageGenes <- df %>%
+  group_by(TC) %>%
+  summarize(sig = factor(
+    ifelse(any(CpG %in% agedf$ILMNID & sigPair), 1, 0)))
+ageGOs <- computeGOs(ageGenes)
 
 
-upset(fromList(list(Decreasing = decGenes, Increasing = incGenes)), 
-      order.by = "freq")
+decCpGs <- filter(agedf, Dir == "Decreasing")$ILMNID
+decGenes <- df %>%
+  group_by(TC) %>%
+  summarize(sig = factor(
+    ifelse(any(CpG %in% decCpGs & sigPair), 1, 0)))
+decGOs <- computeGOs(decGenes)
 
-## Changed
-enChanged <- showEnrichments(changeGenesENT$ENTREZID)
+incCpGs <- filter(agedf, Dir == "Increasing")$ILMNID
+incGenes <- df %>%
+  group_by(TC) %>%
+  summarize(sig = factor(
+    ifelse(any(CpG %in% incCpGs & sigPair), 1, 0)))
+incGOs <- computeGOs(incGenes)
 
-## Increasing
-enInc <- showEnrichments(incGenesENT$ENTREZID)
-
-## Decreasing
-enDec <- showEnrichments(decGenesENT$ENTREZID)
 
 ```
 
