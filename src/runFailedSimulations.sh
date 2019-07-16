@@ -36,39 +36,132 @@
 
 module load R/3.5.1-foss-2018b
 
-## No cell adjusted
-echo No Cell Adjusted
-resFolder="results/MethComBatExpResidualsNoCellAdj"
+## Cell adjusted
+echo Cell Adjusted
+resFolder="results/MethComBatExpResidualsCellAdj"
 
-# sim95
-num=95
-simFolder="$resFolder/sim$num"
+## Male
+maleFolder="$resFolder/male"
+
+# sim1
+num=1
+simFolder="$maleFolder/sim$num"
+mkdir $simFolder
+
+for i in {1..22}
+do
+  echo $i
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="cell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
+done
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="cell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+mv $simFolder /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$resFolder
+
+# sim49
+num=49
+simFolder="$maleFolder/sim$num"
+mkdir $simFolder
+
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chr22" model="cell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr22.out
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="cell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$simFolder
+
+# sim50
+num=50
+simFolder="$maleFolder/sim$num"
 mkdir $simFolder
 
 for i in {21..22}
 do
   echo $i
-  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="nocell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="cell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
 done
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="cell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$simFolder
 
-# sim97
-num=97
-simFolder="$resFolder/sim$num"
+## Female
+femaleFolder="$resFolder/female"
+
+# sim31
+num=31
+simFolder="$femaleFolder/sim$num"
 mkdir $simFolder
 
-for i in {19..22}
+for i in {11..22}
+do
+  echo $i
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="cell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
+done
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="cell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$simFolder
+
+# sim34
+num=34
+simFolder="$femaleFolder/sim$num"
+mkdir $simFolder
+
+for i in {4..22}
+do
+  echo $i
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="cell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
+done
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="cell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$simFolder
+
+
+
+## No cell adjusted
+echo No Cell Adjusted
+resFolder="results/MethComBatExpResidualsNoCellAdj"
+
+## Male
+maleFolder="$resFolder/male"
+
+# sim1
+num=1
+simFolder="$maleFolder/sim$num"
+mkdir $simFolder
+
+for i in {1..22}
 do
   echo $i
   R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="nocell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
 done
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="nocell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+mv $simFolder /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$resFolder
 
-# sim98
-num=98
-simFolder="$resFolder/sim$num"
+# sim45
+num=45
+simFolder="$maleFolder/sim$num"
 mkdir $simFolder
 
-for i in {17..22}
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chr3" model="nocell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr3.out
+mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$simFolder
+
+## Female
+femaleFolder="$resFolder/female"
+
+# sim1
+num=1
+simFolder="$femaleFolder/sim$num"
+mkdir $simFolder
+
+for i in {1..22}
 do
   echo $i
   R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="nocell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
 done
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="nocell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+mv $simFolder /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$resFolder
+
+# sim72
+num=72
+simFolder="$femaleFolder/sim$num"
+mkdir $simFolder
+
+for i in {14..22}
+do
+  echo $i
+  R CMD BATCH '--args data_fold="'$resFolder'" chr="chr'$i'" model="nocell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
+done
+R CMD BATCH '--args data_fold="'$resFolder'" chr="chrX" model="nocell" out_fold="'$resFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$simFolder
