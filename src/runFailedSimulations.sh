@@ -38,7 +38,7 @@ module load R/3.5.1-foss-2018b
 
 ## Cell adjusted
 echo Cell Adjusted
-resFolder="results/MethComBatExpResidualsCellAdj"
+resFolder="results/MethComBatExpResidualsCellAdjStrat"
 
 ## Male
 maleFolder="$resFolder/male"
@@ -111,7 +111,7 @@ mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$s
 
 ## No cell adjusted
 echo No Cell Adjusted
-resFolder="results/MethComBatExpResidualsNoCellAdj"
+resFolder="results/MethComBatExpResidualsNoCellAdjStrat"
 
 ## Male
 maleFolder="$resFolder/male"
