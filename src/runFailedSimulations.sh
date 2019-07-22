@@ -51,9 +51,9 @@ mkdir $simFolder
 for i in {1..22}
 do
   echo $i
-  R CMD BATCH '--args data_fold="'$maleFolder'" chr="chr'$i'" model="cell" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
+  R CMD BATCH '--args data_fold="'$maleFolder'" chr="chr'$i'" model="cellStrat" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
 done
-R CMD BATCH '--args data_fold="'$maleFolder'" chr="chrX" model="cell" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$maleFolder'" chr="chrX" model="cellStrat" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
 mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$simFolder/
 
 # sim49
@@ -61,8 +61,8 @@ num=49
 simFolder="$maleFolder/sim$num"
 mkdir $simFolder
 
-R CMD BATCH '--args data_fold="'$maleFolder'" chr="chr22" model="cell" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr22.out
-R CMD BATCH '--args data_fold="'$maleFolder'" chr="chrX" model="cell" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$maleFolder'" chr="chr22" model="cellStrat" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr22.out
+R CMD BATCH '--args data_fold="'$maleFolder'" chr="chrX" model="cellStrat" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
 mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$simFolder
 
 # sim50
@@ -73,9 +73,9 @@ mkdir $simFolder
 for i in {21..22}
 do
   echo $i
-  R CMD BATCH '--args data_fold="'$maleFolder'" chr="chr'$i'" model="cell" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
+  R CMD BATCH '--args data_fold="'$maleFolder'" chr="chr'$i'" model="cellStrat" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
 done
-R CMD BATCH '--args data_fold="'$maleFolder'" chr="chrX" model="cell" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$maleFolder'" chr="chrX" model="cellStrat" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
 mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$simFolder
 
 ## Female
@@ -89,9 +89,9 @@ mkdir $simFolder
 for i in {11..22}
 do
   echo $i
-  R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chr'$i'" model="cell" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
+  R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chr'$i'" model="cellStrat" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
 done
-R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chrX" model="cell" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chrX" model="cellStrat" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
 mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$simFolder
 
 # sim34
@@ -102,9 +102,9 @@ mkdir $simFolder
 for i in {4..22}
 do
   echo $i
-  R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chr'$i'" model="cell" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
+  R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chr'$i'" model="cellStrat" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
 done
-R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chrX" model="cell" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chrX" model="cellStrat" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
 mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$simFolder
 
 
@@ -124,9 +124,9 @@ mkdir $simFolder
 for i in {1..22}
 do
   echo $i
-  R CMD BATCH '--args data_fold="'$maleFolder'" chr="chr'$i'" model="nocell" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
+  R CMD BATCH '--args data_fold="'$maleFolder'" chr="chr'$i'" model="nocellStrat" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
 done
-R CMD BATCH '--args data_fold="'$maleFolder'" chr="chrX" model="nocell" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$maleFolder'" chr="chrX" model="nocellStrat" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
 mv $simFolder /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$resFolder
 
 # sim45
@@ -134,7 +134,7 @@ num=45
 simFolder="$maleFolder/sim$num"
 mkdir $simFolder
 
-R CMD BATCH '--args data_fold="'$maleFolder'" chr="chr3" model="nocell" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr3.out
+R CMD BATCH '--args data_fold="'$maleFolder'" chr="chr3" model="nocellStrat" out_fold="'$maleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr3.out
 mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$simFolder
 
 ## Female
@@ -148,9 +148,9 @@ mkdir $simFolder
 for i in {1..22}
 do
   echo $i
-  R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chr'$i'" model="nocell" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
+  R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chr'$i'" model="nocellStrat" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
 done
-R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chrX" model="nocell" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chrX" model="nocellStrat" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
 mv $simFolder /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$resFolder
 
 # sim72
@@ -161,7 +161,7 @@ mkdir $simFolder
 for i in {14..22}
 do
   echo $i
-  R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chr'$i'" model="nocell" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
+  R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chr'$i'" model="nocellStrat" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchr$i.out
 done
-R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chrX" model="nocell" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
+R CMD BATCH '--args data_fold="'$femaleFolder'" chr="chrX" model="nocellStrat" out_fold="'$femaleFolder'" "'$num'"' src/runLinearModelSubset.R $simFolder/modchrX.out
 mv $simFolder/*.* /gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/$simFolder
