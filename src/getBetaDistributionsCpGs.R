@@ -34,6 +34,7 @@ getBetaDistributionsCpGs <- function(folder, chr = 1:22){
     
     print(chrom)
     resList <- lapply(simfolders, function(simFold) {
+      print(paste0(simFold, "/outputchr", chrom, ".txt.gz"))
       df <- read.table(gzfile(paste0(simFold, "/outputchr", chrom, ".txt.gz")),
                  as.is = TRUE)
       ### Remove bad overlaps (solve bug)
@@ -50,7 +51,7 @@ getBetaDistributionsCpGs <- function(folder, chr = 1:22){
       })
       
       perms <- Reduce(cbind, resCpG)
-      pmin <-  matrixStats::colMins(perms, 2, min, na.rm=TRUE)
+      pmin <-  matrixStats::colMins(perms, na.rm=TRUE)
       
       llhd2 <- function(x,p) {
         ans <- -sum(log(dbeta(x,p[1],p[2])))
