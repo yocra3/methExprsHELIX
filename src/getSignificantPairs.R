@@ -54,7 +54,7 @@ featPvals <- function(feat, df, distr, base){
 }
 
 featsPvals <- pbsapply(feats, featPvals, df = df, distr = distr, base = base, 
-                     cl = 7)
+                     cl = 25)
 featStatsDF <- data.frame(feat = feats, p.val = featsPvals, 
                           p.val.adj = p.adjust(featsPvals, "BH"),
                           stringsAsFactors = FALSE)
@@ -76,6 +76,6 @@ col <- ifelse(base == "cpgs", "CpG", "TC")
 }
 
 df$sigPair <- pbsapply(seq_len(nrow(df)), isSig, df = df, distr = distr, base = base, 
-                sigFeats = sigFeats, thres = thresP, cl = 7)
+                sigFeats = sigFeats, thres = thresP, cl = 25)
 
 save(df, featStatsDF, sigFeats, file = paste0(resFolder, "/allres_simP_", base, ".Rdata"))
