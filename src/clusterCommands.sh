@@ -49,3 +49,5 @@ sbatch src/runFailedSimulations2.sh
 
 ## Send files
 rsync -azvh --progress -e 'ssh -o "ProxyCommand ssh -A cruizh@sit-web.upf.edu -W %h:%p"' . cruizh@marvin.s.upf.edu:/scratch/lab_helix_omics/cruizh/methExprsHELIX/results/
+## Receive files
+rsync -azvh --progress -e 'ssh -o "ProxyCommand ssh -A cruizh@sit-web.upf.edu -W %h:%p"' cruizh@marvin.s.upf.edu:/gpfs42/projects/lab_helix_omics/shared_data/methExprsHELIX/results .

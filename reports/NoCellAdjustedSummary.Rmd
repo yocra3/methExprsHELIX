@@ -763,6 +763,7 @@ scale_y_continuous(trans = "log2",
 ```
 
 CpGs associated with gene expression are more frequent in the same states, independent of the number of TCs they are associated with. The main differences that we observed were that CpGs that are associated with different TCs tend to be more frequent in ZNF regions and in bivalent regulatory states. 
+
 ## CpG methylation 
 
 Next, we tested whether CpGs associated with gene expression were located in specific position with respect to genes.

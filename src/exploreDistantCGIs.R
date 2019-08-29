@@ -1,5 +1,5 @@
 ###############################################################################
-# Test cell type specific associations 
+# Test association with distal promoter (Did not work - not included in final version)
 ###############################################################################
 
 library(dplyr)

@@ -5,8 +5,8 @@
 library('minfi', verbose = FALSE)
 
 # Loading GRSet
-load("./data/methylome_subcohort_ComBatSlide_6cells_notfitr_v3.Rdata")
-gset <- methylome_subcohort_ComBatSlide_6cells_notfitr
+load("./data/methylome_subcohort_ComBatSlide_notfitr_v4.Rdata")
+gset <- methylome_subcohort_ComBatSlide_notfitr
 
 ## Load common IDs
 load("results/preprocessFiles/comIds.Rdata")

@@ -9,7 +9,19 @@ for i in {1..100}
 do
  echo sim$i `(ls sim$i/outputchr*.txt | wc -l)` | grep -v 22$
 done 
+ 
+## Female
+for i in {1..100}
+do
+ echo sim$i `(ls sim$i/outputchr*.txt | wc -l)` | grep -v 23$
+done 
 
+## Male
+for i in {1..100}
+do
+ echo sim$i `(ls sim$i/outputchr*.txt | wc -l)` | grep -v 24$
+done 
+ 
 
 ## Make files with lines per simulation
 ls -d */ -I lista>lista
