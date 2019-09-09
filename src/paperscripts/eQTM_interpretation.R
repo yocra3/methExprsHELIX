@@ -845,9 +845,9 @@ atStudy <- read.delim("data/EWAS_Atlas_studies.tsv")
 atCohort <- read.delim("data/EWAS_Atlas_cohorts.tsv")
 
 ## Combined traits (web page does not allow to download all files)
-traitsL <- lapply(1:5, function(x) read.csv(paste0("data/tableExport", x, ".csv")))
-traits <- Reduce(rbind, traitsL)
-#traits <- read.csv("data/traitsTable.csv")
+# traitsL <- lapply(1:5, function(x) read.csv(paste0("data/tableExport", x, ".csv")))
+# traits <- Reduce(rbind, traitsL)
+traits <- read.csv("data/traitsTable.csv")
 
 colnames(atStudy)[1] <- "Study.id"
 colnames(atCohort)[c(2, 4, 11, 15)] <- c("Study.id", "Array", "Source", "Ancestry")
@@ -986,17 +986,27 @@ typesExpsAt <- lapply(types, function(t){
 })
 combExpsA <- Reduce(rbind, typesExpsAt)
 combExpsA <- rbind(allExpsAt, combExpsA)
+combExpsA <- combExpsA %>%
+  spread(par, Value) 
 
+expsSum <- combExpsA %>%
+  mutate(Trait = Region) %>%
+  group_by(Trait) %>%
+  summarize(Sig = any(p.val < 1e-3)) %>%
+  left_join(group_by(atlasDFsel, Trait) %>% summarize(n = n()), by = "Trait")
+
+## Only plot exposures enriched in at least one CpG group
+plotExps <- filter(expsSum, Sig) %>% pull(Trait)
 
 a <- combExpsA %>%
-  spread(par, Value) %>%
   mutate(CpGType = factor(Type, levels = c("Significant", "Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both")),
          Trait = Region) %>%
   select(-Type) %>%
   left_join(select(traits, Trait, Type), by = "Trait") %>%
-  mutate(Type = ifelse(is.na(Type), "Others", as.character(Type)),
-         Group = ifelse(Type %in% c("cancer", "non-cancer disease", "Others"), "Disease", "Exposure")) %>%
-  filter(OR != 0 & ORlow > 0.1)
+  mutate(Group = ifelse(Type %in% c("cancer", "non-cancer disease"), "Disease", "Exposure")) %>%
+  filter(Trait %in% plotExps) %>%
+  ## Change OR of 0 to OR of 1 to avoid having meaningless bars in the plot
+  mutate(OR = ifelse(OR == 0, 1, OR))
 p1 <- a %>%
   filter(Group == "Disease") %>%
   ggplot(aes(x = Region, y = OR, fill = CpGType)) + 

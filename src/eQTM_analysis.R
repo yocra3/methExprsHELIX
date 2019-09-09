@@ -71,7 +71,7 @@ snpspos <- plink$map %>%
 genepos <- rowRanges(gsetF) %>%
   data.frame() %>%
   mutate(geneid = names(rowRanges(gsetF)),
-         chr = seqnames, 
+         chr = gsub("chr", "", seqnames), 
          s1 = start,
          s2 = end) %>%
   select(geneid, chr, s1, s2)
@@ -116,13 +116,5 @@ me = Matrix_eQTL_main(
   cisDist = cisDist,
   pvalue.hist = "qqplot",
   min.pv.by.genesnp = FALSE,
-  noFDRsaveMemory = FALSE);
-
-## Results:
-
-cat('Analysis done in: ', me$time.in.sec, ' seconds', '\n');
-cat('Detected local eQTLs:', '\n');
-show(me$cis$eqtls)
-cat('Detected distant eQTLs:', '\n');
-show(me$trans$eqtls)
+  noFDRsaveMemory = FALSE)
 
