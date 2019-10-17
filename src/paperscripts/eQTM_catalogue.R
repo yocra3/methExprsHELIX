@@ -87,8 +87,6 @@ TC_plot <- sigDf %>%
   scale_y_continuous("")  +
   ggtitle("CpGs associated with each TC")
 
-
-
 png("paper/eQTMs_CpGs_TC_distr.png", width = 2000, height = 1500, res = 300)
 plot_grid(CpG_plot, TC_plot, labels = "AUTO", nrow = 2)
 dev.off()
@@ -108,6 +106,21 @@ sigDf %>%
   summary()
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
 # 1.000   1.000   1.000   1.812   2.000  26.000
+
+## Distribution pairs per chromosomes ####
+png("paper/eQTMs_Chr_distr.png", width = 2000, height = 1500, res = 300)
+sigDf %>% 
+  mutate(chr = substring(TC, 3, 4),
+         chr = gsub("^0", "", chr)) %>%
+  group_by(chr) %>%
+  summarize(n = n()) %>%
+  mutate(chr = factor(chr, levels = c(1:22, "X"))) %>%
+  ggplot(aes(x = chr, y = n)) + 
+  geom_bar(stat = "identity") +
+  scale_x_discrete(name = "Chromosome") +
+  scale_y_continuous(name = "Number Pairs") +
+  theme_bw()
+dev.off()
 
 
 ## Volcano plot ####

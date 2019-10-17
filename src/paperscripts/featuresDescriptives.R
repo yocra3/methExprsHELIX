@@ -82,3 +82,18 @@ png("paper/CpGs_TC_distr.png", width = 2000, height = 1500, res = 300)
 plot_grid(CpG_plot, TC_plot, labels = "AUTO", nrow = 2)
 dev.off()
 
+
+## Distribution pairs per chromosomes ####
+png("paper/allPairs_Chr_distr.png", width = 2000, height = 1500, res = 300)
+overDF %>% 
+  mutate(chr = substring(TC, 3, 4),
+         chr = gsub("^0", "", chr)) %>%
+  group_by(chr) %>%
+  summarize(n = n()) %>%
+  mutate(chr = factor(chr, levels = c(1:22, "X", "Y"))) %>%
+  ggplot(aes(x = chr, y = n)) + 
+  geom_bar(stat = "identity") +
+  scale_x_discrete(name = "Chromosome") +
+  scale_y_continuous(name = "Number Pairs") +
+  theme_bw()
+dev.off()

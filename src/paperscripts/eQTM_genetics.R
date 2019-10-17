@@ -73,19 +73,35 @@ png("paper/eQTMsHerit.png", width = 3500, height = 2000, res = 300)
 plot_grid(h2tot, h2SNP, ncol = 2)
 dev.off()
 
-## ARIES mQTLs ####
-mQTLs <- read.table("data/ARIES_mQTLs.tab", header = TRUE, as.is = TRUE)
+## Common mQTLs between ARIES and HELIX ####
+load("results/eQTLanalysis/comQTLs.Rdata")
 
-ariesCpGs <- unique(mQTLs$gene)
+comCpGs <- unique(c(as.character(comCisQTL$gene), as.character(comTransQTL$gene)))
+
 CpGsSum %>%
-  mutate(mQTL = CpG %in% ariesCpGs) %>%
+  mutate(mQTL = CpG %in% comCpGs,
+         cisQTL = CpG %in% comCisQTL$gene,
+         transQTL = CpG %in% comTransQTL$gene) %>%
   group_by(Combined) %>%
-  summarize(n = sum(mQTL),
-            prop = mean(mQTL))
+  summarize_if(is.logical, list(sum, mean))
+# Combined     mQTL_fn1 cisQTL_fn1 transQTL_fn1 mQTL_fn2 cisQTL_fn2 transQTL_fn2
+# <chr>           <int>      <int>        <int>    <dbl>      <dbl>        <dbl>
+#  Mono_Inverse     3424       3394           77   0.271      0.269       0.00609
+#  Mono_Positi…     2474       2438           71   0.276      0.272       0.00792
+#  Multi_Both       1362       1360           41   0.344      0.343       0.0103
+#  Multi_Inver…     2061       2037           68   0.336      0.332       0.0111
+#  Multi_Posit…     1268       1259           28   0.359      0.357       0.00793
+#  Non-signifi…    26129      24471         1944   0.0744     0.0697      0.00554
 
 CpGsSum %>%
-  mutate(mQTL = CpG %in% ariesCpGs,
+  mutate(mQTL = CpG %in% comCpGs,
+         cisQTL = CpG %in% comCisQTL$gene,
+         transQTL = CpG %in% comTransQTL$gene,
          Type = ifelse(Combined != "Non-significant", "Significant", "Non-significant")) %>%
   group_by(Type) %>%
-  summarize(n = sum(mQTL),
-            prop = mean(mQTL))
+  summarize_if(is.logical, list(sum, mean))
+# Type         mQTL_fn1 cisQTL_fn1 transQTL_fn1 mQTL_fn2 cisQTL_fn2 transQTL_fn2
+# <chr>           <int>      <int>        <int>    <dbl>      <dbl>        <dbl>
+# Non-signifi…    26129      24471         1944   0.0744     0.0697      0.00554
+# Significant     10589      10488          285   0.301      0.298       0.00809
+
