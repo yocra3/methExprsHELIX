@@ -104,7 +104,7 @@ library(GOfuncR)
 library(dplyr)
 server <- "//isg10174/data/WS_HELIX/HELIX_analyses/expr_met_SM/paper/"
 
-load(paste0(sever, "GOobjects.Rdata"))
+load(paste0(server, "GOobjects.Rdata"))
 
 addImmunityInfo <- function(tab){
   get_parent_nodes(tab$GO.ID) %>%
@@ -136,10 +136,19 @@ lapply(names(subtypesTabs), function(x){
   
 })
 table(allMod$tag)
-lapply(subtypesTabs, function(x){
+a <- lapply(subtypesTabs, function(x){
   c(n = nrow(x), imm = sum(x$immune), immP = round(mean(x$immune)*100, 1), 
        adap = sum(x$tag == "adaptive"), innate = sum(x$tag == "innate"))
-})
+}) %>%
+  data.frame() %>%
+  t() %>%
+  data.frame() %>%
+  mutate(group = rownames(.),
+         group = ifelse(grepl("Mono", group), "Mono", "Multi")) %>%
+  group_by(group) %>%
+  summarize(adap = sum(adap),
+            innate = sum(innate)) 
+  chisq.test()
 
 # CpG Enrichment ####
 rownames(methyAnnot) <- methyAnnot$Name

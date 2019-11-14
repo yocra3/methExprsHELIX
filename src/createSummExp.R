@@ -55,7 +55,7 @@ mod <- model.matrix(~ cohort + e3_sex + age_sample_years +
                       Mono_6, data = pd)
 sv.obj <- smartsva.cpp(mat, mod, mod0 = NULL, n.sv = n.sv)
 
-# Residuaals de només els SVs.
+# Residuals de només els SVs.
 res <- residuals(lmFit(mat, sv.obj$sv), mat)
 
 # Save

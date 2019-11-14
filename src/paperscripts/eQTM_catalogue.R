@@ -70,6 +70,13 @@ sum(unique(sigDf$TC) %in% codingTCs)
 length(unique(sigDf$CpG))
 # [1] 35228
 
+### Proportion negative pairs
+sum(sigDf$FC < 0)
+# [1] 38310
+
+mean(sigDf$FC < 0)*100
+# [1] 60.01786
+
 ## Distribution CpGs/TC
 CpG_plot <- sigDf %>%
   group_by(CpG) %>%
@@ -123,10 +130,70 @@ sigDf %>%
 dev.off()
 
 
+## Comparison distribution pairs per chromosome
+chrDisteQTM <- sigDf %>% 
+  mutate(chr = substring(TC, 3, 4),
+         chr = gsub("^0", "", chr)) %>%
+  group_by(chr) %>%
+  summarize(n = n()) %>%
+  mutate(chr = factor(chr, levels = c(1:22, "X")))
+
+chrDistAll <- overDF %>% 
+  mutate(chr = substring(TC, 3, 4),
+         chr = gsub("^0", "", chr)) %>%
+  group_by(chr) %>%
+  summarize(n = n()) %>%
+  mutate(chr = factor(chr, levels = c(1:22, "X", "Y")))
+
+chrDistComb <- inner_join(chrDisteQTM, chrDistAll, by = "chr")
+
+png("paper/chrDistr_all_eQTM.png", width = 2000, height = 1200, res = 300)
+chrDistComb %>% mutate("All Pairs" = chrDistComb$n.y/sum(chrDistComb$n.y), 
+                       "eQTMs" = chrDistComb$n.x/sum(chrDistComb$n.x)) %>% 
+  gather(set, prop, 4:5) %>% 
+  mutate(chr = factor(chr, levels = c(1:22, "X", "Y"))) %>%
+  ggplot(aes( x = chr, y = prop, fill = set)) + 
+  geom_bar(stat = "identity", position=position_dodge()) + 
+  theme_bw() +
+  scale_fill_discrete(name = "") +
+  scale_y_continuous(name = "Percentage of CpG-TC pairs") +
+  scale_x_discrete(name = "Chromosome")
+dev.off()
+chisq.test(rbind(chrDistComb$n.x, chrDistComb$n.y))
+
+chrDistComb %>% mutate(a = chrDistComb$n.y/sum(chrDistComb$n.y), 
+                       e = chrDistComb$n.x/sum(chrDistComb$n.x),
+                       da = e - a,
+                       dr = e/a) %>%
+  arrange(desc(abs(dr)))
+
+chrDistComb %>% mutate(a = chrDistComb$n.y/sum(chrDistComb$n.y), 
+                       e = chrDistComb$n.x/sum(chrDistComb$n.x),
+                       da = e - a,
+                       dr = e/a) %>%
+  arrange(abs(dr))
+
+
+
 ## Volcano plot ####
+vol_all <- ggplot(modU, aes(x = FC/10, y = -log10(p.value))) +
+  geom_point(alpha = 0.01) + 
+  scale_x_continuous(name = "-log2 FC per 10% methylation change") +
+  ylab(expression(-log[10](p.value))) +
+  theme_bw()
+
+vol_filt <- modU %>%
+  filter(abs(FC) < 5) %>%
+  ggplot(aes(x = FC/10, y = -log10(p.value))) +
+  geom_point(alpha = 0.01) + 
+  scale_x_continuous(name = "-log2 FC per 10% methylation change") +
+  ylab(expression(-log[10](p.value))) +
+  theme_bw()
+
 png("paper/volcano_all.png", width = 2000, height = 2000, res = 300)
 volcano_plot(modU$p.value, modU$FC/100, paste(modU$CpG, modU$TC), 
-             tPV = -log10(1e-8), tFC = 0.01, show.labels = FALSE)
+             tPV = -log10(1e-8), tFC = 0.01, show.labels = FALSE) +
+  geom_point(alpha = 0.1)
 dev.off()
 
 
@@ -135,7 +202,7 @@ dev.off()
 featsU_var <- methyAnnot %>%
   as_tibble() %>%
   mutate(feat = Row.names) %>%
-  select(feat, meth_range, variability) %>%
+  dplyr::select(feat, meth_range, variability) %>%
   right_join(featsU, by = "feat") %>%
   mutate(sig = ifelse(p.val.adj < 0.05, "significant", "random"))
 table(featsU_var$variability, featsU_var$sig)
@@ -146,18 +213,35 @@ chisq.test(table(featsU_var$variability, featsU_var$sig))
 # data:  table(featsU_var$variability, featsU_var$sig)
 # X-squared = 15894, df = 1, p-value < 2.2e-16
 
+t <- table(featsU_var$variability, featsU_var$sig)
+t[1]/t[2]/t[3]*t[4]
+
+
 ### TC call rate
 int_TC <- expAnnot %>%
-  select(probeset_id, Expressed, CallRate) %>%
-  mutate(sig = ifelse(probeset_id %in% sigTCs, "significant", "random"))
-table(int_TC$Expressed, int_TC$sig)
-#               random significant
-# Expressed      42200       10733
-# Not-Expressed   7421         338
+  dplyr::select(probeset_id, Expressed, CallRate) %>%
+  mutate(sig = ifelse(probeset_id %in% sigTCs, "TCs in eQTMs", "TCs without eQTMs"))
+table(int_TC$CallRate < 90, int_TC$sig)
+# TCs in eQTMs TCs without eQTM
+# FALSE       8584        19317
+# TRUE        2487        30304
 
-chisq.test(table(int_TC$Expressed, int_TC$sig))
+chisq.test(table(int_TC$CallRate > 90, int_TC$sig))
 # X-squared = 1149, df = 1, p-value < 2.2e-16
+t <- table(int_TC$CallRate < 90, int_TC$sig)
+t[1]/t[2]/t[3]*t[4]
 
+png("paper/CallRate_eQTMs.png", width = 2000, height = 1000, res = 300)
+int_TC %>%
+  ggplot(aes(x = sig, y = CallRate, fill = sig)) + 
+  geom_boxplot() +
+  theme_bw() +
+  scale_x_discrete(name = "") +
+  theme(legend.position = "none") +
+  scale_y_continuous(name = "TC call rate")
+dev.off()
+
+summary(glm(CallRate/100 ~ sig, int_TC, family = "binomial"))
 
 ### Classify CpG in groups ####
 CpGsSum <- modU %>%
@@ -178,6 +262,16 @@ t
 # Multi    6135     3530  3965
 chisq.test(t[, -3])
 # X-squared = 68.441, df = 1, p-value < 2.2e-16
+t[1]/t[2]/t[3]*t[4]
+# [1] 0.8114236
+addmargins(prop.table(t))
+# Inverse  Positive      Both       Sum
+# Mono  0.3587203 0.2543715 0.0000000 0.6130919
+# Multi 0.1741512 0.1002044 0.1125525 0.3869081
+# Sum   0.5328716 0.3545759 0.1125525 1.0000000
+
+
+
 
 sink("paper/CpGs_type.txt")
 addmargins(t)
@@ -195,32 +289,239 @@ dist_all <- ggplot(modU_comp, aes(x = Distance, color = sigPair)) + geom_density
   ggtitle("CpG-TC Distance (all pairs)") + 
   theme(plot.title = element_text(hjust = 0.5))
 
+ks.test(filter(modU_comp, sigPair) %>% pull(., Distance),
+        filter(modU_comp, !sigPair) %>% pull(., Distance))
+# Two-sample Kolmogorov-Smirnov test
+# 
+# data:  filter(modU_comp, sigPair) %>% pull(., Distance) and filter(modU_comp, !sigPair) %>% pull(., Distance)
+# D = 0.15302, p-value < 2.2e-16
+# alternative hypothesis: two-sided
+
+wilcox.test(filter(modU_comp, sigPair) %>% pull(., Distance))
+# Wilcoxon rank sum test with continuity correction
+# 
+# data:  filter(modU_comp, sigPair) %>% pull(., Distance) and filter(modU_comp, !sigPair) %>% pull(., Distance)
+# V = 932277653, p-value < 2.2e-16
+# alternative hypothesis: true location shift is not equal to 0
+
+
+modU_comp %>% 
+  group_by(sigPair) %>%
+  summarize(m = median(Distance), 
+            l = quantile(Distance, 0.25), 
+            h = quantile(Distance, 0.75))
+
+# sigPair     m       l       h
+# <lgl>   <int>   <dbl>   <dbl>
+#   1 FALSE      14 -236288 236864
+# 2 TRUE    -1333 -117011  84618.
+
+
 ## Signif per groups
 dist_groups <- modU_comp %>%
   filter(sigPair) %>%
   left_join(CpGsSum, by = "CpG") %>%
-  ggplot(aes(x = Distance, color = Direction)) + geom_density() + 
+  mutate(Direction = factor(Direction, levels = c("Inverse", "Positive", "Both"))) %>%
+  ggplot(aes(y = Distance, x = Direction, fill = Direction)) + 
+  geom_boxplot() + 
   theme_bw() + 
-  scale_color_manual(name = "", 
+  scale_fill_manual(name = "", 
                      breaks = c("Inverse", "Positive", "Both"),
-                     values = c("grey30", "red", "blue")) +
-  facet_grid(~ Type) +
-  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
+                     values = c("turquoise", "coral", "grey70")) +
+  facet_grid(~ Type, scales = "free_x") +
+  scale_y_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
-  scale_y_continuous(name = "", breaks = NULL) + 
   ggtitle("CpG-TC Distance (Significant pairs)") + 
   theme(plot.title = element_text(hjust = 0.5))
 
+modU_comp %>%
+  filter(sigPair) %>%
+  left_join(CpGsSum, by = "CpG") %>%
+  group_by(Direction) %>%
+  summarize(m = median(Distance), 
+            l = quantile(Distance, 0.25), 
+            h = quantile(Distance, 0.75))
+# Direction     m        l       h
+# <chr>     <int>    <dbl>   <dbl>
+#   1 Both      -1679 -138102  112303
+# 2 Inverse    -686  -98790.  74250.
+# 3 Positive  -7771 -131119   82650.
+
+modU_comp %>%
+  filter(sigPair) %>%
+  left_join(CpGsSum, by = "CpG") %>%
+  group_by(Type) %>%
+  summarize(m = median(Distance), 
+            l = quantile(Distance, 0.25), 
+            h = quantile(Distance, 0.75))
+# Type       m        l      h
+# <chr>  <dbl>    <dbl>  <dbl>
+#   1 Mono  -2142. -121440. 75250.
+# 2 Multi  -967  -115541  89436
+
+modU_comp %>%
+  filter(sigPair) %>%
+  left_join(CpGsSum, by = "CpG") %>%
+  group_by(Combined) %>%
+  summarize(m = median(Distance), 
+            l = quantile(Distance, 0.25), 
+            h = quantile(Distance, 0.75)) %>%
+  mutate(d = h - l)
+# Combined            m        l      h       d
+# 1 Mono_Inverse    -1094  -95897   62932 158829
+# 2 Mono_Positive  -10839 -150837   86773 237610
+# 3 Multi_Both      -1679 -138102  112303 250405
+# 4 Multi_Inverse    -342 -101410.  80146 181556.
+# 5 Multi_Positive  -4760 -110583   78594 189177
+
+## Test for Multi Inverse - data with median closest to 0.
+modU_comp %>%
+  filter(sigPair) %>%
+  left_join(CpGsSum, by = "CpG") %>%
+  filter(Combined == "Multi_Inverse") %>%
+  pull(., Distance) %>%
+  wilcox.test()
+# Wilcoxon signed rank test with continuity correction
+# 
+# data:  .
+# V = 82114591, p-value = 2.781e-10
+# alternative hypothesis: true location is not equal to 0
+
+modU_comp %>%
+  filter(sigPair) %>%
+  left_join(CpGsSum, by = "CpG") %>%
+  lapply(c("Mono_Inverse", "Mono_Positive", "Multi_Both", "Multi_Inverse", "Multi_Positive"),
+         function(x, y) wilcox.test(subset(y, Combined == x)$Distance), y = .)
+# 
+# [[1]]
+# 
+# Wilcoxon signed rank test with continuity correction
+# 
+# data:  subset(y, Combined == x)$Distance
+# V = 35386210, p-value < 2.2e-16
+# alternative hypothesis: true location is not equal to 0
+# 
+# 
+# [[2]]
+# 
+# Wilcoxon signed rank test with continuity correction
+# 
+# data:  subset(y, Combined == x)$Distance
+# V = 17397764, p-value < 2.2e-16
+# alternative hypothesis: true location is not equal to 0
+# 
+# 
+# [[3]]
+# 
+# Wilcoxon signed rank test with continuity correction
+# 
+# data:  subset(y, Combined == x)$Distance
+# V = 44268445, p-value = 4.402e-12
+# alternative hypothesis: true location is not equal to 0
+# 
+# 
+# [[4]]
+# 
+# Wilcoxon signed rank test with continuity correction
+# 
+# data:  subset(y, Combined == x)$Distance
+# V = 82114591, p-value = 2.781e-10
+# alternative hypothesis: true location is not equal to 0
+# 
+# 
+# [[5]]
+# 
+# Wilcoxon signed rank test with continuity correction
+# 
+# data:  subset(y, Combined == x)$Distance
+# V = 21816864, p-value = 7.207e-16
+# alternative hypothesis: true location is not equal to 0
+# 
 png("paper/distance_distribution.png", width = 2000, height = 2000, res = 300)
 plot_grid(dist_all, dist_groups, nrow = 2)
 dev.off()
+
+# Effect size ####
+summary(abs(subset(modU_comp, sigPair)$FC/100))
+# Min.  1st Qu.   Median     Mean  3rd Qu.     Max.
+# 0.000237 0.006348 0.011786 0.021641 0.022983 1.643445
+
+effectAll <- modU_comp %>%
+  filter(sigPair) %>%
+  mutate(Dir = ifelse(FC > 0, "Positive", "Inverse")) %>%
+  ggplot(aes(x = Dir, y = abs(FC/10), fill = Dir)) +
+  geom_boxplot() +
+  scale_y_continuous(limits = c(0, 0.5), name = "abs(log2 FC)/10% Methylation") +
+  theme_bw() +
+  scale_x_discrete(name = "eQTM Effect Direction") +
+  theme(legend.position = "none")
+
+ks.test(abs(subset(sigDf, FC > 0)$FC)/10,
+        abs(subset(sigDf, FC < 0)$FC)/10)
+
+modU_comp %>%
+  filter(sigPair) %>%
+  mutate(Dir = ifelse(FC > 0, "Positive", "Inverse"),
+         FC = abs(FC)/10) %>%
+  group_by(Dir) %>%
+  summarize(m = median(FC),
+            l = quantile(FC, 0.25),
+            h = quantile(FC, 0.75))
+
+# Dir           m       l      h
+# <chr>     <dbl>   <dbl>  <dbl>
+#   1 Inverse  0.122 0.0655 0.240
+# 2 Positive 0.112 0.0607 0.214
+
+effect_groups <- modU_comp %>%
+  filter(sigPair) %>%
+  left_join(CpGsSum, by = "CpG") %>%
+  mutate(Direction = factor(Direction, levels = c("Inverse", "Positive", "Both"))) %>%
+  ggplot(aes(x = Direction, y = abs(FC/10), fill = Direction)) + 
+  geom_boxplot() +
+  theme_bw() + 
+  scale_fill_manual(name = "", 
+                    breaks = c("Inverse", "Positive", "Both"),
+                    values = c("turquoise", "coral", "grey70")) +
+  facet_grid(~ Type, scale = "free_x") +
+  scale_y_continuous(name = "abs(log2 FC)/10% Methylation", 
+                     limits = c(0, 0.5)) +
+  scale_x_discrete(name = "CpG Type") + 
+  ggtitle("Effect size in significant pairs") + 
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none")
+
+modU_comp %>%
+  filter(sigPair) %>%
+  left_join(CpGsSum, by = "CpG") %>%
+  mutate(FC = abs(FC)/10) %>%
+  group_by(Combined) %>%
+  summarize(m = median(FC),
+            l = quantile(FC, 0.25),
+            h = quantile(FC, 0.75))
+# Combined             m       l      h
+# <chr>            <dbl>   <dbl>  <dbl>
+#   1 Mono_Inverse   0.113  0.0628 0.219
+# 2 Mono_Positive  0.111  0.0605 0.209
+# 3 Multi_Both     0.0992 0.0543 0.187
+# 4 Multi_Inverse  0.136  0.0727 0.274
+# 5 Multi_Positive 0.127  0.0678 0.251
+
+
+png("paper/effect_distribution.png", width = 2000, height = 1500, res = 300)
+plot_grid(effectAll, effect_groups, nrow = 2)
+dev.off()
+
+
+
+
 
 # Distance vs Effect size
 png("paper/distance_effect.png", width = 2000, height = 1300, res = 300)
 modU_comp %>%
   filter(sigPair) %>%
   mutate(Direction = ifelse(FC > 0, "Positive", "Inverse")) %>%
-  ggplot(aes(x = Distance, y = FC/100, color = Direction)) + 
+  ggplot(aes(x = Distance, y = FC/10, color = Direction)) + 
   geom_point() + 
   theme_bw() + 
   scale_color_manual(name = "", 
@@ -228,36 +529,45 @@ modU_comp %>%
                      values = c("red", "blue")) +
   scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
-  scale_y_continuous(name = "FC per 1% Methylation") + 
+  scale_y_continuous(name = "log2 FC/10% Methylation",
+                     limits = c(-0.5, 0.5)) + 
   ggtitle("CpG-TC Distance vs Effect") + 
   theme(plot.title = element_text(hjust = 0.5))
 dev.off()
 
-png("paper/effect_distribution.png", width = 2000, height = 1500, res = 300)
+
 modU_comp %>%
   filter(sigPair) %>%
-  left_join(CpGsSum, by = "CpG") %>%
-  ggplot(aes(x = abs(FC/100), color = Direction)) + 
-  geom_density() +
-  theme_bw() + 
-  scale_color_manual(name = "", 
-                     breaks = c("Inverse", "Positive", "Both"),
-                     values = c("grey30", "red", "blue")) +
-  facet_grid(~ Type) +
-  scale_x_continuous(name = "abs FC per 1% Methylation", 
-                     limits = c(0, 0.2)) +
-  scale_y_continuous(name = "", breaks = NULL) + 
-  ggtitle("Effect size Distribution (Significant pairs)") + 
-  theme(plot.title = element_text(hjust = 0.5))
-dev.off()
+  mutate(Direction = ifelse(FC > 0, "Positive", "Inverse")) %>%
+  cor.test(x = pull(., Distance), 
+           y = pull(., FC),
+           cot = .)
+
+modU_comp %>%
+  filter(sigPair) %>%
+  lm(abs(FC) ~ abs(Distance), .) %>%
+  summary()
+# Call:
+#   lm(formula = abs(FC) ~ abs(Distance), data = .)
+# 
+# Residuals:
+#   Min      1Q  Median      3Q     Max
+# -2.139  -1.529  -0.985   0.134 162.182
+# 
+# Coefficients:
+#   Estimate Std. Error t value Pr(>|t|)
+# (Intercept)    2.165e+00  2.114e-02 102.407   <2e-16 ***
+#   abs(Distance) -7.580e-09  9.968e-08  -0.076    0.939
+# 
+
 
 ## Illumina Annotation ####
 modU_Annot <- modU %>%
   as_tibble() %>%
-  select(CpG, TC, FC, sigPair) %>%
+  dplyr::select(CpG, TC, FC, p.value, sigPair) %>%
   left_join(CpGsSum, by = "CpG") %>%
-  left_join(select(methyAnnot, CpG, UCSC_RefGene_Name), by = "CpG") %>%
-  left_join(select(expAnnot, TC, GeneSymbol_Affy), by = "TC") %>%
+  left_join(dplyr::select(methyAnnot, CpG, UCSC_RefGene_Name), by = "CpG") %>%
+  left_join(dplyr::select(expAnnot, TC, GeneSymbol_Affy), by = "TC") %>%
   mutate(GeneAffy = strsplit(GeneSymbol_Affy, ";"))
 
 methGenes <- unique(unlist(modU_Annot$UCSC_RefGene_Name))
@@ -446,6 +756,15 @@ png("paper/CompModelsCpGs.png", width = 2500, height = 2500, res = 300)
 parPlot
 dev.off()
 
+## Volcano plot
+png("paper/volcano_all_adjCells.png", width = 2000, height = 2000, res = 300)
+volcano_plot(modC$p.value, modC$FC/100, paste(modC$CpG, modC$TC), 
+             tPV = -log10(1e-8), tFC = 0.01, show.labels = FALSE) +
+  geom_point(alpha = 0.1)
+dev.off()
+
+
+
 ## Compare estimates ####
 ### Merge dataset
 mergeTB <- modU %>%
@@ -582,6 +901,61 @@ data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, cellCpGs), "Fstat"
 dev.off()
 
 
-## Compare with other eQTM studies ####
-### Bonder
-### Gutierrez-Arcelus
+## Compare with other eQTM studies (Bonder) PMID: 27918535 ####
+bonder <- read.delim("data/Bonder_cis_eQTMs.txt")
+
+## Remove CpGs and Genes not present in HELIX
+bonder.f <- subset(bonder, SNPName %in% unique(modU$CpG))
+bonder.f <- subset(bonder.f, HGNCName %in% expGenes)
+
+## Add SYMBOL to significant pairs
+sigDf_Annot <- sigDf %>%
+  as_tibble() %>%
+  left_join(dplyr::select(expAnnot, TC, GeneSymbol_Affy), by = "TC") %>%
+  mutate(GeneAffy = strsplit(GeneSymbol_Affy, ";"))
+
+## Bonder summary (after filtering)
+length(unique(bonder.f$SNPName))
+# [1] 10198
+length(unique(bonder.f$HGNCName))
+# [1] 3223
+
+## Common CpGs
+length(intersect(unique(bonder.f$SNPName), unique(sigDf_Annot$CpG)))
+# [1] 4750
+mean(unique(bonder.f$SNPName) %in% unique(sigDf_Annot$CpG))*100
+# [1] 46.57776
+
+## Common Genes
+sigGenes <- unique(unlist(sigDf_Annot$GeneAffy))
+length(intersect(unique(bonder.f$HGNCName), unique(sigDf_Annot$GeneAffy)))
+# [1] 2003
+mean(unique(bonder.f$HGNCName) %in% unique(sigDf_Annot$GeneAffy))*100
+# [1] 62.14707
+
+
+## Common Pairs
+bonder.f$pair <- paste(bonder.f$SNPName, bonder.f$HGNCName)
+
+sigPairs <- lapply(seq_len(nrow(sigDf_Annot)), function(x) {
+  paste(sigDf_Annot[x, "CpG"], unlist(sigDf_Annot[x, "GeneAffy"]) )
+})
+
+length(intersect(bonder.f$pair, unlist(sigPairs)))
+# [1] 4002
+mean(bonder.f$pair %in% unlist(sigPairs))*100
+# [1] 28.0783
+
+## Restrict comparison to pairs present in HELIX dataset
+allPairs <- lapply(seq_len(nrow(modU_Annot)), function(x) {
+  paste(modU_Annot[x, "CpG"], unlist(modU_Annot[x, "GeneAffy"]) )
+})
+
+f <- function(x) mean(as.numeric(strsplit(as.character(x), ";")[[1]]))
+
+bonder.merge <- bonder.f %>%
+  mutate(CpG = SNPName, GeneSymbol_Affy = HGNCName,
+         dir = sapply(IncludedDatasetsCorrelationCoefficient, f)) %>%
+  left_join(sigDf_Annot, by = c("CpG", "GeneSymbol_Affy"))
+
+table(bonder.merge$FC > 0, bonder.merge$dir > 0)

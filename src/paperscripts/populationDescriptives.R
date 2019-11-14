@@ -10,7 +10,8 @@ load("results/MethComBatExpResidualsCellAdj/pheno.RData")
 
 getSum <- function(vec, type = "continuous"){
   if (type == "continuous"){
-    c(mean = mean(vec, na.rm = TRUE), range = range(vec, na.rm = TRUE))
+    c(median = median(vec, na.rm = TRUE), 
+      range = quantile(vec, probs = c(0.25, 0.75), na.rm = TRUE))
   } else if (type == "categorical"){
     t <- table(vec)
     data.frame(names = names(t),  tab = as.vector(t), 
@@ -41,7 +42,7 @@ contSums <- lapply(contVecs, getSum, type = "continuous")
 ## Create table
 contTab <- data.frame(Reduce(rbind, contSums))
 ## Convert proportions to percentages
-contVals <- sprintf("%.3f (%.3f-%.3f)", contTab$mean, contTab$range1, contTab$range2)
+contVals <- sprintf("%.3f (%.3f-%.3f)", contTab$median, contTab$range.25., contTab$range.75.)
 contTab <- data.frame(names = contVars, vals = contVals)
 write.table(contTab, file = "paper/PopDescrip_cont.txt", col.names = TRUE, 
-            quote = FALSE, row.names = FALSE)
+            sep = "\t", quote = FALSE, row.names = FALSE)
