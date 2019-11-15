@@ -56,20 +56,14 @@ computeGOs <- function(df){
               nodeSize = 10,
               affyLib = "hta20transcriptcluster.db")
   
-  class <- runTest(Data, algorithm = "classic", statistic = "fisher")
   mixed <- runTest(Data, algorithm = "weight01", statistic = "fisher")
   
   
   finTab <- GenTable(Data, 
                      w0 = mixed,
-                     classic = class, 
                      orderBy = "w0",
-                     ranksOf = "classic",
-                     topNodes = length(score(class)))
-  finTab <- subset(finTab, w0 < 0.01 & classic < 0.01)
-  
-  gos <- list(classic = class, mixed = mixed)
-  list(gos = gos, table = finTab)
+                     topNodes = length(score(mixed)))
+  list(go = mixed, table = finTab)
 }
 
 runGO <- function(annot, df, filter){
@@ -99,12 +93,165 @@ subtypes_go <- lapply(subtypes, runGO, annot = CpGsSum, df = df)
 ## Save as Rdata data and process in local
 save(allGos, subtypes_go, file = "paper/GOobjects.Rdata")
 
+## Genes used in GOs
+allGos$go@geneData["Significant"]
+# Significant
+# 6675
+
+sapply(subtypes_go, function(x) x$go@geneData["Significant"])
+# Mono_Inverse.Significant  Mono_Positive.Significant
+# 3389                       2637
+# Multi_Both.Significant  Multi_Inverse.Significant
+# 2591                       2810
+# Multi_Positive.Significant
+# 1872
+
+## GOs changed
+sapply(subtypes_go, function(x) sum(x$table$w0 < 0.001))
+# Mono_Inverse  Mono_Positive     Multi_Both  Multi_Inverse Multi_Positive
+# 24             18             51             46             42
+
+
+
 ## It does not work on server. Run locally.
 library(GOfuncR)
 library(dplyr)
 server <- "//isg10174/data/WS_HELIX/HELIX_analyses/expr_met_SM/paper/"
 
 load(paste0(server, "GOobjects.Rdata"))
+
+## Define categories for GO terms
+## Use http://amigo.geneontology.org/amigo/dd_browse and only select GOs > 10 genes in H. Sapiens.
+## Exclude terms with regulation
+##' Immune: 
+##' - immune system process
+##' - cell killing
+##' Use level one/two parent
+##' 
+##' Adaptive immunity:
+##' - adaptive immune response
+##' - B cell selection
+##' - T cell selection
+##' - antigen processing and presentation
+##' - B killer cell activation involved in immune response
+##' - T cell activation involved in immune response
+##' - complement activation
+##' - complement-dependent cytotoxicity
+##' - T cell mediated cytotoxicity
+##' - B cell mediated immunity
+##' - T cell mediated immunity
+##' - opsonization
+##' - B cell activation involved in immune response
+##' - T cell activation involved in immune response
+##' - B cell activation
+##' - T cell activation
+##' - B cell activation involved in immune response
+##' - T cell activation involved in immune response
+##' - B cell differentiation
+##' - T cell differentiation
+##' - B cell proliferation
+##' - T cell proliferation
+##' - lymphocyte homeostasis
+##' - T cell extravasation
+##' - lymphocyte migration
+##' - lymphocyte coestimulation
+##' - immunoglobulin production
+##' - T cell cytokine production
+##' - humoral immune response mediated by circulating immunoglobulin
+##' 
+##' 
+##' Innate immunity:
+##' - innate immune response
+##' - astrocyte activation involved in immune response
+##' - endothelial cell activation involved in immune response
+##' - myeloid cell activation involved in immune response
+##' - natural killer cell activation involved in immune response
+##' - natural killer cell mediated cytotoxicity
+##' - neutrophil mediated cytotoxicity
+##' - immune response-regulating cell surface receptor signaling pathway involved in phagocytosis
+##' - leukocyte degranulation
+##' - dendritic cell cytokine production
+##' - myeloid leukocyte mediated immunity
+##' - natural killer cell mediated immunity
+##' - myeloid cell activation involved in immune response
+##' - natural killer cell activation involved in immune response
+##' - leukocyte activation involved in inflammatory response
+##' - natural killer cell activation involved in immune response
+##' - natural killer cell differentiation
+##' - natural killer cell proliferation
+##' - natural killer cell activation
+##' - myeloid leukocyte activation
+##' - neutrophil homeostasis
+##' - nuetrophil extravasation
+##' - dendritic cell migration
+##' - mononuclear cell migration
+##' - myeloid leukocyte migration
+##' - myeloid cell homeostasis
+##' - dendritic cell cytokine production
+##' - myeloid leukocyte cytokine production
+##' - antimicrobial humoral response
+##' - inflammatory response to antigenic stimulus
+
+immune <- c("immune system process", "cell killing")
+adaptive <- c("adaptive immune response",
+              "B cell selection",
+              "T cell selection",
+              "antigen processing and presentation",
+              "B killer cell activation involved in immune response",
+              "T cell activation involved in immune response",
+              "complement activation",
+              "complement-dependent cytotoxicity",
+              "T cell mediated cytotoxicity",
+              "B cell mediated immunity",
+              "T cell mediated immunity",
+              "opsonization",
+              "B cell activation involved in immune response",
+              "T cell activation involved in immune response",
+              "B cell activation",
+              "T cell activation",
+              "B cell activation involved in immune response",
+              "T cell activation involved in immune response",
+              "B cell differentiation",
+              "T cell differentiation",
+              "B cell proliferation",
+              "T cell proliferation",
+              "lymphocyte homeostasis",
+              "T cell extravasation",
+              "lymphocyte migration",
+              "lymphocyte coestimulation",
+              "immunoglobulin production",
+              "T cell cytokine production",
+              "humoral immune response mediated by circulating immunoglobulin")
+innate <- c("innate immune response",
+            "astrocyte activation involved in immune response",
+            "endothelial cell activation involved in immune response",
+            "myeloid cell activation involved in immune response",
+            "natural killer cell activation involved in immune response",
+            "natural killer cell mediated cytotoxicity",
+            "neutrophil mediated cytotoxicity",
+            "immune response-regulating cell surface receptor signaling pathway involved in phagocytosis",
+            "leukocyte degranulation",
+            "dendritic cell cytokine production",
+            "myeloid leukocyte mediated immunity",
+            "natural killer cell mediated immunity",
+            "myeloid cell activation involved in immune response",
+            "natural killer cell activation involved in immune response",
+            "leukocyte activation involved in inflammatory response",
+            "natural killer cell activation involved in immune response",
+            "natural killer cell differentiation",
+            "natural killer cell proliferation",
+            "natural killer cell activation",
+            "myeloid leukocyte activation",
+            "neutrophil homeostasis",
+            "nuetrophil extravasation",
+            "dendritic cell migration",
+            "mononuclear cell migration",
+            "myeloid leukocyte migration",
+            "myeloid cell homeostasis",
+            "dendritic cell cytokine production",
+            "myeloid leukocyte cytokine production",
+            "antimicrobial humoral response",
+            "inflammatory response to antigenic stimulus")
 
 addImmunityInfo <- function(tab){
   get_parent_nodes(tab$GO.ID) %>%
@@ -236,6 +383,14 @@ combPos %>%
   theme_bw() 
 dev.off()
 
+## Positive vs others UTR5 and Intergenic
+methGenePos %>%
+  filter(Combined != "Non-significant") %>%
+  mutate(group = ifelse(grepl("Positive", Combined), "Positive", "Other")) %>%
+  group_by(group) %>%
+  summarize_if(is.numeric, sum) %>%
+  getOR(cols = c("Intergenicin", "Intergenicou"), df = .)
+
 
 ## Methylation levels ####
 methMethLevels <- as_tibble(methyAnnot) %>%
@@ -265,6 +420,29 @@ getOR2 <- function(col, df){
 g2 <- function(x, gpos){
   sapply(gpos, function(y) getOR2(y, df = x))
 }
+
+methMethLevels %>%
+  mutate(lowp = low/tot,
+         medp = medium/tot,
+         highp = high/tot) %>%
+  gather(Levels, proportion, 7:9)
+
+
+methMethLevels %>% 
+  select(Combined, low, medium, high) %>%
+  gather(Levels, vals, 2:4) %>%
+  spread(Combined, vals) %>%
+  mutate(Significant = Mono_Inverse + Mono_Positive + Multi_Inverse + Multi_Positive + Multi_Both) %>%
+  gather(CpGtype, vals, 2:8) %>%
+  mutate(CpGtype = factor(CpGtype, levels = c("Significant", "Non-significant", types))) %>%
+  group_by(CpGtype) %>%
+  mutate(prop = vals/sum(vals)) %>%
+  ggplot(aes(x = Levels, y = prop, fill = CpGtype)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_x_discrete(name = "Methylation Levels", limits = cats) +
+  scale_fill_manual(name = "CpG Type", values = c("#999999", "#000000", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
+  theme_bw() 
+
 
 allMethLevs <- methMethLevels %>%
   group_by(Type0) %>%
@@ -307,6 +485,33 @@ combMethLevs %>%
   scale_fill_manual(name = "CpG Type", values = c("#999999", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
   theme_bw() 
 dev.off()
+
+## Multi vs mono in medium
+methMethLevels %>%
+  filter(Combined != "Non-significant") %>%
+  mutate(group = ifelse(grepl("Mono", Combined), "Mono", "Multi")) %>%
+  group_by(group) %>%
+  summarize_if(is.numeric, sum) %>%
+  getOR2(col = "medium", df = .)
+  
+
+## Negative vs positive in low
+methMethLevels %>%
+  filter(Combined != "Non-significant") %>%
+  mutate(group = ifelse(grepl("Positive", Combined), "Positive", "Other")) %>%
+  group_by(group) %>%
+  summarize_if(is.numeric, sum) %>%
+  getOR2(col = "low", df = .)
+
+## Multi positive vs other in high
+methMethLevels %>%
+  filter(Combined != "Non-significant") %>%
+  mutate(group = ifelse(Combined == "Multi_Positive", "Positive", "Other")) %>%
+  group_by(group) %>%
+  summarize_if(is.numeric, sum) %>%
+  getOR2(col = "high", df = .)
+
+
 
 
 ## CpG Islands ####
