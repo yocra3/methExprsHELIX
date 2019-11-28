@@ -11,6 +11,7 @@ library(dplyr)
 library(cowplot)
 library(tidyr)
 library(GenomicRanges)
+library(snpStats)
 
 load("results/MethComBatExpResidualsNoCellAdj/allres_simP_cpgs.Rdata")
 load("results/preprocessFiles/allOverlaps.Rdata")
@@ -18,18 +19,12 @@ load("results/preprocessFiles/methyAnnotation.Rdata")
 load("results/preprocessFiles/gexpAnnotation.Rdata")
 
 # Get useful variables ####
-CpGsSum <- df %>%
+CpGsNum <- df %>%
   group_by(CpG) %>%
-  summarise(Type = ifelse(sum(sigPair) == 0, "Non-significant",
-                          ifelse(sum(sigPair) == 1, "Mono", "Multi")),
-            Direction = ifelse(sum(sigPair) == 0, "Non-significant",
-                               ifelse(all(FC[sigPair] > 0), "Positive", 
-                                      ifelse(all(FC[sigPair] < 0), "Inverse", "Both")))) %>%
-  mutate(Combined = ifelse(Type == "Non-significant", 
-                           "Non-significant", 
-                           paste(Type, Direction, sep = "_")))
+  summarise(nTC = sum(sigPair)) %>%
+  mutate(nCat = ifelse(nTC > 3, "4+", nTC))
 
-
+codingTCs <- subset(expAnnot, Coding == "coding")$transcript_cluster_id
 
 ## Heritability ####
 ## Create summary tibble
@@ -39,39 +34,30 @@ herm <- h2df %>%
   ## Remove CpGs with NA in h2
   filter(!is.na(h2_total)) %>%
   mutate(CpG = cgid) %>%
-  inner_join(CpGsSum, h2df, by = "CpG") %>%
-  mutate(Combined = factor(Combined, 
-                           levels = c("Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both", "Non-significant")))
-  
+  inner_join(CpGsNum, h2df, by = "CpG") 
 
 h2tot <- herm %>%
-  ggplot(aes(x = Combined, y = h2_total, fill = Combined)) + 
-  geom_boxplot() + 
+  ggplot(aes(x = nCat, y = h2_total)) + 
+  geom_boxplot() +
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
   ggtitle("Total Heritability") +
-  scale_x_discrete(name = "CpG Type") +
+  scale_x_discrete(name = "num TCs affected") +
   scale_y_continuous(name = "h2", limits = c(0, 1)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "none") +
-  scale_fill_manual(name = "CpG Type", values = c("#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73", "#FFFFFF")) 
-
+        legend.position = "none")
 
 h2SNP <- herm %>%
-  ggplot(aes(x = Combined, y = h2_SNPs, fill = Combined)) + 
+  ggplot(aes(x = nCat, y = h2_total)) + 
   geom_boxplot() + 
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
   ggtitle("SNP Heritability") +
-  scale_x_discrete(name = "CpG Type") +
+  scale_x_discrete(name = "num TCs affected") +
   scale_y_continuous(name = "h2", limits = c(0, 1)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "none") +
-  scale_fill_manual(name = "CpG Type", values = c("#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73", "#FFFFFF")) 
+        legend.position = "none")
 
-png("paper/eQTMsHerit.png", width = 3500, height = 2000, res = 300)
-plot_grid(h2tot, h2SNP, ncol = 2)
-dev.off()
 
 
 herm %>%
@@ -141,62 +127,97 @@ herm %>%
   
 ## Common mQTLs between ARIES and HELIX ####
 load("results/eQTLanalysis/comQTLs.Rdata")
+mQTLs <- read.table("data/ARIES_mQTLs.tab", header = TRUE, as.is = TRUE)
+mQTLsH2 <- read.table("results/ARIES/mqtls.txt", header = TRUE, as.is = TRUE)
 
-comCpGs <- unique(c(as.character(comCisQTL$gene), as.character(comTransQTL$gene)))
+## Select pairs detected in previous analysis from ARIES pipeline
+## Merge with ARIES original data
+ARIESannot <- read.table("data/ariesmqtlsnps.bim", as.is = TRUE)
+colnames(ARIESannot) <- c("chr", "SNP", "cm", "pos", "Ref", "Alt")
 
-CpGsSum %>%
+HELIXannot <- read.table("~/data/WS_HELIX/HELIX_preproc/gwas/Final_data_HRCimp_QC2/HELIX.impQC.rs.bim", as.is = TRUE)
+colnames(HELIXannot) <- c("chr", "SNP", "cm", "pos", "Ref", "Alt")
+
+comMQTLs <- mQTLsH2 %>%
+  mutate(gene = CpG) %>%
+  select(SNP, gene, A1, A2, freq, b, se, p, N, r2) %>%
+  semi_join(rbind(comCisQTL, comTransQTL), by = c("SNP", "gene")) %>%
+  inner_join(left_join(mQTLs, select(ARIESannot, SNP, Ref, Alt), by = "SNP"), 
+             by = c("SNP", "gene")) %>%
+  as_tibble()
+
+## Remove pairs where effect direction do not match
+comMQTLs.f <- comMQTLs %>%
+  filter(!is.na(Ref)) %>%
+  filter(!(sign(b) != sign(beta) & A1 == Ref)) %>%
+  filter(!(sign(b) == sign(beta) & A1 == Alt))
+
+## Merge ARIES and HELIX results to test direction
+comMQTLs2 <- rbind(comCisQTL, comTransQTL) %>%
+  left_join(select(HELIXannot, SNP, Ref, Alt), by = "SNP") %>%
+  inner_join(left_join(mQTLs, select(ARIESannot, SNP, Ref, Alt), by = "SNP"),
+             by = c("SNP", "gene")) %>%
+  as_tibble()
+
+comCpGs <- unique(comMQTLs.f$gene)
+
+meQTLTab <- CpGsNum %>%
   mutate(mQTL = CpG %in% comCpGs,
          cisQTL = CpG %in% comCisQTL$gene,
          transQTL = CpG %in% comTransQTL$gene) %>%
-  group_by(Combined) %>%
+  group_by(nCat) %>%
   summarize_if(is.logical, list(sum, mean))
-# Combined     mQTL_fn1 cisQTL_fn1 transQTL_fn1 mQTL_fn2 cisQTL_fn2 transQTL_fn2
-# <chr>           <int>      <int>        <int>    <dbl>      <dbl>        <dbl>
-#  Mono_Inverse     3424       3394           77   0.271      0.269       0.00609
-#  Mono_Positi…     2474       2438           71   0.276      0.272       0.00792
-#  Multi_Both       1362       1360           41   0.344      0.343       0.0103
-#  Multi_Inver…     2061       2037           68   0.336      0.332       0.0111
-#  Multi_Posit…     1268       1259           28   0.359      0.357       0.00793
-#  Non-signifi…    26129      24471         1944   0.0744     0.0697      0.00554
 
-CpGsSum %>%
-  mutate(mQTL = CpG %in% comCpGs,
-         cisQTL = CpG %in% comCisQTL$gene,
-         transQTL = CpG %in% comTransQTL$gene,
-         Type = ifelse(Combined != "Non-significant", "Significant", "Non-significant")) %>%
-  group_by(Type) %>%
-  summarize_if(is.logical, list(sum, mean))
-# Type         mQTL_fn1 cisQTL_fn1 transQTL_fn1 mQTL_fn2 cisQTL_fn2 transQTL_fn2
-# <chr>           <int>      <int>        <int>    <dbl>      <dbl>        <dbl>
-# Non-signifi…    26129      24471         1944   0.0744     0.0697      0.00554
-# Significant     10589      10488          285   0.301      0.298       0.00809
-
-CpGsSum %>%
-  mutate(mQTL = CpG %in% comCpGs,
-         cisQTL = CpG %in% comCisQTL$gene,
-         transQTL = CpG %in% comTransQTL$gene) %>%
-  summarize_if(is.logical, list(sum, mean))
-# mQTL_fn1 cisQTL_fn1 transQTL_fn1 mQTL_fn2 cisQTL_fn2 transQTL_fn2
-# <int>      <int>        <int>    <dbl>      <dbl>        <dbl>
-#   36718      34959         2229   0.0950     0.0905      0.00577
+# nCat  mQTL_fn1 cisQTL_fn1 transQTL_fn1 mQTL_fn2 cisQTL_fn2 transQTL_fn2
+# <chr>    <int>      <int>        <int>    <dbl>      <dbl>        <dbl>
+#  0        26052      24471         1944   0.0742     0.0697      0.00554
+#  1         5885       5832          148   0.272      0.270       0.00685
+#  2         2427       2408           65   0.335      0.333       0.00898
+#  3         1117       1117           24   0.351      0.351       0.00754
+#  4+        1141       1131           48   0.356      0.352       0.0150
 
 
+write.table(meQTLTab[, c(1:2, 5, 3, 6, 4, 7)], file = "paper/meQTL_sum.tab",
+            quote = FALSE, row.names = FALSE)
 
-## Enrichment significant vs non-significant
-CpGsSum %>%
-  mutate(mQTL = CpG %in% comCpGs,
-         mQTL2 = !mQTL,
-         Type = ifelse(Combined != "Non-significant", "Significant", "Non-significant")) %>%
-  group_by(Type) %>%
-  summarize_if(is.logical, sum) %>%
-  ungroup() %>%
-  select(-Type) %>%
-  data.matrix() %>%
-  chisq.test()
-# Pearson's Chi-squared test with Yates' continuity correction
-# 
-# data:  eQTLtab[, -1]
-# X-squared = 19045, df = 1, p-value < 2.2e-16
+meQTL_p <- CpGsNum %>%
+  mutate(mQTL = CpG %in% comCpGs) %>%
+  group_by(nCat) %>%
+  summarize(prop = mean(mQTL)*100) %>%
+  ggplot(aes(x = nCat, y = prop)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  scale_x_discrete(name = "num TCs affected") +
+  scale_y_continuous(name = "CpGs with meQTL (%)") +
+  theme_bw() +
+  theme(legend.position = "none")
+  
+
+png("paper/eQTMsGenetics.png", width = 3500, height = 2000, res = 300)
+plot_grid(plot_grid(h2tot, h2SNP, nrow = 2), meQTL_p, ncol = 2)
+dev.off()
+
+
+CpGsNum %>%
+  mutate(mQTL = CpG %in% comCpGs) %>%
+  glm(mQTL ~ nTC, family = "binomial", .) %>%
+  summary()
+# Estimate Std. Error z value Pr(>|z|)
+# (Intercept) -2.391760   0.005913  -404.5   <2e-16 ***
+#   nTC          0.518905   0.006034    86.0   <2e-16 ***
+  
+CpGsNum %>%
+  mutate(mQTL = CpG %in% comCpGs) %>%
+  filter(nTC > 0) %>%
+  glm(mQTL ~ nTC, family = "binomial", .) %>%
+  summary()
+# Coefficients:
+#   Estimate Std. Error z value Pr(>|z|)
+# (Intercept) -0.987955   0.017510  -56.42   <2e-16 ***
+#   nTC          0.076388   0.006996   10.92   <2e-16 ***
+#   
+
+
+
 eQTLtab <- CpGsSum %>%
   mutate(mQTL = CpG %in% comCpGs,
          mQTL2 = !mQTL,
@@ -234,3 +255,88 @@ eQTLtab2 <- CpGsSum %>%
   data.matrix() 
 eQTLtab2[2]/eQTLtab2[1]/eQTLtab2[4]*eQTLtab2[3]
 # [1] 1.39692
+
+
+# Integrate with gene expression ####
+load("results/eQTLanalysis/eQTLs.Rdata")
+eQTL <- rbind(gexpme$cis$eqtls, gexpme$trans$eqtls) %>%
+  mutate(TC = gene) %>%
+  dplyr::select(-gene)
+
+sigDf <- filter(df, sigPair)
+
+
+## Merge all associations 
+## Remove non-coherent associations
+mergedDf <- rbind(comCisQTL, comTransQTL) %>%
+  mutate(CpG = gene) %>%
+  semi_join(comMQTLs.f, by = c("SNP", "gene")) %>%
+  inner_join(sigDf, by = "CpG") %>%
+  inner_join(eQTL, by = c("snps", "TC")) %>%
+  dplyr::select(-sigPair) %>%
+  filter(sign(mergedDf$beta.x)*sign(mergedDf$FC) == sign(mergedDf$beta.y))
+
+length(unique(paste(mergedDf$CpG, mergedDf$TC)))
+length(unique(paste(mergedDf$CpG, mergedDf$TC)))/nrow(sigDf)
+length(unique(mergedDf$CpG))
+length(unique(mergedDf$CpG))/length(unique(sigDf$CpG))
+length(unique(mergedDf$TC))
+length(unique(mergedDf$TC))/length(unique(sigDf$TC))
+sum(unique(mergedDf$TC) %in% codingTCs)
+sum(unique(mergedDf$TC) %in% codingTCs)/sum(unique(sigDf$TC) %in% codingTCs)
+
+
+## Check replication in GTEx
+### Download data (https://gtexportal.org/home/datasets) - 28/11/2019
+tar --extract --file=data/GTEx_Analysis_v8_eQTL.tar GTEx_Analysis_v8_eQTL/Whole_Blood.v8.signif_variant_gene_pairs.txt.gz
+mv GTEx_Analysis_v8_eQTL/ data/
+  
+
+### Example
+# SNP: rs12543539
+# CpG: cg10173586
+# Gene: PLEC (TC08001737.hg.1)
+
+plink <- read.plink("/home/isglobal.lan/cruiz/data/WS_HELIX/HELIX_preproc/gwas/Final_data_HRCimp_QC2/HELIX.impQC.rs")
+load("results/preprocessFiles/Methylation_GRSet.RData")
+colnames(gset) <- gset$HelixID
+
+load("results/preprocessFiles/Expression_SE_residuals.RData")
+colnames(se) <- se$HelixID
+
+## Common samples
+comSamps <- intersect(intersect(rownames(plink$geno), colnames(gset)), colnames(se))
+
+alleles <- plink$map["rs12543539", c("allele.1", "allele.2")]
+alleles <- c(paste0(alleles[1], alleles[1]),
+             paste0(alleles[1], alleles[2]),
+             paste0(alleles[2], alleles[2]))
+
+dat <- data.frame(geno = as.numeric(plink$geno[comSamps, "rs12543539"]),
+                  methy = as.numeric(getBeta(gset["cg10173586", comSamps])),
+                  gexp = as.numeric(assay(se["TC08001737.hg.1", comSamps])))
+dat$geno <- alleles[dat$geno]
+
+sm <- ggplot(dat, aes(x = factor(geno), y = methy)) + 
+  geom_boxplot() +
+  scale_x_discrete(name = "rs12543539") +
+  scale_y_continuous(name = "cg10173586") +
+  theme_bw()
+
+sg <- ggplot(dat, aes(x = factor(geno), y = gexp)) + 
+  geom_boxplot() +
+  scale_x_discrete(name = "rs12543539") +
+  scale_y_continuous(name = "TC08001737.hg.1") +
+  theme_bw()
+
+  
+me <- ggplot(dat, aes(x = methy, y = gexp)) + 
+  geom_point() +
+  scale_x_continuous(name = "cg10173586") +
+  scale_y_continuous(name = "TC08001737.hg.1") +
+  geom_smooth(method = "lm") +
+  theme_bw()
+png("paper/eQTMstrio.png", width = 3500, height = 2000, res = 300)
+plot_grid(plot_grid(sm, sg, nrow = 1), me, nrow = 2)
+dev.off()
+
