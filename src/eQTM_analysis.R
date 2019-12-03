@@ -127,6 +127,49 @@ comTransQTL <- me$trans$eqtls %>%
   semi_join(mQTLs, by = c("SNP", "gene"))
 save(comCisQTL, comTransQTL, file = "results/eQTLanalysis/comQTLs.Rdata")
 
+## Run analysis using ARIES scripts ####
+mkdir results/ARIES
+
+## Create files with selected probes
+mQTLs <- read.table("data/ARIES_mQTLs.tab", header = TRUE, as.is = TRUE)
+
+selSNPs <- unique(mQTLs$SNP)
+selCpGs <- unique(mQTLs$gene)
+
+write.table(selSNPs, file = "results/ARIES/selSNPs.tab", col.names = FALSE,
+            row.names = FALSE, quote = FALSE)
+
+
+## Create matrix with methylation
+load("results/preprocessFiles/Methylation_GRSet.RData")
+colnames(gset) <- gset$HelixID
+M <- getBeta(gset)
+
+M <- M[rownames(M) %in% selCpGs, ]
+save(M, file = "results/ARIES/methy.Rdata")
+
+## Create covars
+covars <- colData(gset)[, c("cohort", "e3_sex", "age_sample_years", "NK_6", "Bcell_6", 
+                            "CD4T_6", "CD8T_6", "Gran_6", "Mono_6")]
+colnames(covars)[1:2] <- c("Batch", "Sex")
+write.table(covars, file = "results/ARIES/covars.tab", quote = FALSE,
+            sep = "\t")
+
+
+ids <- gset$HelixID
+write.table(cbind(ids, ids), file = "F7", col.names = FALSE,
+            row.names = FALSE, quote = FALSE)
+
+
+## Outside python
+## Modify script to adhere folders
+python ~/software/ariesmqtl/run.py --geno ~/data/WS_HELIX/HELIX_preproc/gwas/Final_data_HRCimp_QC2/HELIX.impQC.rs \
+--meth results/ARIES/methy.Rdata --covars results/ARIES/covars.tab \
+--fo results/ARIES/mqtls.txt --keep-snps results/ARIES/selSNPs.tab \
+--tp F7
+
+Rscript ./preprocessing.R --meth results/ARIES/methy.Rdata --covars results/ARIES/covars.tab
+
 ## Run association between expression and mQTLs ####
 
 ## Get list TCs and SNPs
@@ -234,65 +277,4 @@ gexpme = Matrix_eQTL_main(
   noFDRsaveMemory = FALSE)
 
 save(gexpme, file = "results/eQTLanalysis/eQTLs.Rdata")
-
-eQTL <- rbind(gexpme$cis$eqtls, gexpme$trans$eqtls) %>%
-  mutate(TC = gene) %>%
-  dplyr::select(-gene)
-
-sigDF <- filter(df, sigPair)
-
-# Run Mediation analysis ####
-## Merge all associations 
-mergedDf <- rbind(comCisQTL, comTransQTL) %>%
-  mutate(CpG = gene) %>%
-  dplyr::select(-gene, -SNP) %>%
-  inner_join(sigDF, by = "CpG") %>%
-  inner_join(eQTL, by = c("snps", "TC")) %>%
-  dplyr::select(-sigPair)
-
-### Merge all data: snps, gexp, methylation and covariates
-comSamps <- intersect(rownames(geno), colnames(gset))
-
-mergeData <- data.frame(as(geno[comSamps, unique(mergedDf$snps)], "numeric"),
-                        t(getBeta(gset[unique(mergedDf$CpG), comSamps])), 
-                        t(assay(seF[unique(mergedDf$TC), comSamps])), 
-                        colData(seF[ , comSamps])[, c("cohort", "e3_sex", "age_sample_years", "NK_6", "Bcell_6", 
-                                         "CD4T_6", "CD8T_6", "Gran_6", "Mono_6")],
-                        pcs[comSamps, paste0("PC", 1:10)])
-
-covsForm <- paste(colnames(covars), collapse = " + ")
-
-## Define functions
-runCpG <- function(CpG, snp, df, covsForm){
-  
-  mod.M <- glm(formula(paste(CpG, "~",  snp, "+", covsForm)), data = df)
-  mod.M
-}
-
-runGeneCpG <- function(CpG, snp, TC, df, covsForm){
-  mod.Y <- glm(formula(paste(TC, "~", snp, "+", CpG, "+", covsForm)), data = df)
-  mod.Y
-}
-
-## Run models
-mQTLpairs <- mergedDf %>%
-  dplyr::select(CpG, snps) %>%
-  distinct()
-
-snpCpG <- mclapply(seq_len(nrow(mQTLpairs))[1:100], function(i){
-  runCpG(CpG = mQTLpairs[i, "CpG"], snp = mQTLpairs[i, "snps"],
-         df = mergeData, covsForm = covsForm)
-}, mc.cores = 10)
-names(snpCpG) <- sapply(seq_len(nrow(mQTLpairs)), 
-                        function(i) paste(mQTLpairs[i, "CpG"], mQTLpairs[i, "snps"], sep = "-"))
-
-colorect_inv <- lapply(selgenes, runSurvGene, df = clin)
-
-
-
-
-colorect_med <- lapply(selgenes, function(gene){
-  mediate(colorect_genes[[gene]], colorect_inv[[gene]], treat = 'inv', mediator=gene, sims = 1000)
-})
-
 

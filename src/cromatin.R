@@ -2,7 +2,8 @@
 # Chromatin STATE (15-STATE)
 ###############################################################
 
-crom <- read.delim("/Lacie_CRW10023/HELIX_preproc/methylation/annotation/Illumina450K_MQtlMappingFile_Original37_v.1.2_incStates15.txt", header = T)
+## Run in home
+crom <- read.delim("~/data/WS_HELIX/HELIX_preproc/methylation/annotation/Illumina450K_MQtlMappingFile_Original37_v.1.2_incStates15.txt", header = T)
 sort(names(crom))
 
 # Searching function:
@@ -56,7 +57,7 @@ tssb <- crom[,grep("TssBiv", colnames(crom))]
 tssb <- apply(tssb, 1, anyt)
 
 # BivFlnk
-bf <- crom[,grep("TssBiv", colnames(crom))]
+bf <- crom[,grep("BivFlnk", colnames(crom))]
 bf <- apply(bf, 1, anyt)
 
 # EnhBiv
@@ -83,4 +84,4 @@ crom.df2 <- data.frame("TssA" = tssa, "TssAFlnk" = tssaf, "TxFlnk" = txf,
 	"Het" = het, "TssBiv" = tssb, "BivFlnk" = bf, "EnhBiv" = eb, "ReprPC" = rp,
 	"ReprPCWk" = rpcwk, "Quies" = quies)
 crom.df <- cbind(crom.df1, crom.df2)
-write.csv(crom.df, "crom15.csv")
+write.csv(crom.df, "data/crom15.csv")

@@ -20,6 +20,8 @@ library(MultiDataSet)
 library(ggforce)
 library(topGO)
 library(FlowSorted.Blood.450k)
+library(GenomicRanges)
+library(BSgenome.Hsapiens.UCSC.hg19)
 
 ## Load datasets ####
 load("results/preprocessFiles/allOverlaps.Rdata")
@@ -159,7 +161,7 @@ chrDistComb %>% mutate("All Pairs" = chrDistComb$n.y/sum(chrDistComb$n.y),
   scale_y_continuous(name = "Percentage of CpG-TC pairs") +
   scale_x_discrete(name = "Chromosome")
 dev.off()
-chisq.test(rbind(chrDistComb$n.x, chrDistComb$n.y))
+chisq.test(chrDistComb$n.x, p = chrDistComb$n.y / sum(chrDistComb$n.y))
 
 chrDistComb %>% mutate(a = chrDistComb$n.y/sum(chrDistComb$n.y), 
                        e = chrDistComb$n.x/sum(chrDistComb$n.x),
@@ -173,6 +175,137 @@ chrDistComb %>% mutate(a = chrDistComb$n.y/sum(chrDistComb$n.y),
                        dr = e/a) %>%
   arrange(abs(dr))
 
+
+
+allRanges <- modU_comp %>%
+  mutate(chr = substring(TC, 3, 4),
+         chr = gsub("^0", "", chr),
+         chr = paste0("chr", chr))  %>%
+  makeGRangesFromDataFrame(start.field = "TC_Pos",
+                           end.field = "TC_Pos")
+
+binsM <- tileGenome(seqinfo(Hsapiens), tilewidth = 10e6,      
+                     cut.last.tile.in.chrom=TRUE)
+binsM2 <- tileGenome(seqinfo(Hsapiens), tilewidth = 1e6,      
+                    cut.last.tile.in.chrom=TRUE)
+
+ov <- findOverlaps(allRanges, binsM)
+ov2 <- findOverlaps(allRanges, binsM2)
+
+modU_comp$range <- as.character(binsM)[to(ov)]
+modU_comp$range2 <- as.character(binsM2)[to(ov2)]
+
+chrDistRang <- modU_comp %>%
+  mutate(chr = substring(TC, 3, 4)) %>%
+  group_by(range) %>%
+  summarize(n = n(),
+            nsig = sum(sigPair),
+            chr = unique(chr)) %>%
+  mutate(prop = nsig/n, 
+         OR = prop/(sum(nsig)/sum(n)))
+chisq.test(chrDistRang$nsig, p = chrDistRang$n/sum(chrDistRang$n))
+
+
+chrDistRangMini <- modU_comp %>%
+  mutate(chr = substring(TC, 3, 4)) %>%
+  group_by(range2) %>%
+  summarize(n = n(),
+            nsig = sum(sigPair),
+            chr = unique(chr)) %>%
+  mutate(prop = nsig/n, 
+         OR = prop/(sum(nsig)/sum(n)))
+
+
+## Run test in regions with more than 4300 pairs
+### Remove regions that would have less than 20 eQTMs 
+chrDistRang2 <- subset(chrDistRang, n > 4300)
+
+chrDistRang2 %>%
+  mutate(chr = gsub("^0", "", chr),
+         chr = factor(chr, levels = as.character(1:22))) %>%
+  arrange(chr) %>%
+  mutate(range = factor(range, levels = as.character(range))) %>%
+  ggplot(aes(x = range, y = OR, col = chr)) +
+  geom_point() +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  theme_bw()
+
+### Simulate distribution
+cot <- modU_comp %>%
+  mutate(chr = substring(TC, 3, 4)) %>%
+  filter(range %in% chrDistRang2$range)
+ORsims <- parallel::mclapply(seq_len(1e4), function(x) {
+  cot %>%
+    mutate(vec = sample(sigPair)) %>%
+    group_by(range) %>%
+    summarize(n = n(),
+              nsig = sum(vec),
+              chr = unique(chr)) %>%
+    mutate(prop = nsig/n, 
+           OR = prop/(sum(nsig)/sum(n))) %>%
+    ungroup() %>%
+    summarize(max = max(OR), min = min(OR))
+}, mc.cores = 5)
+
+ORmat <- Reduce(rbind, ORsims)
+filter(chrDistRang2, OR > max(ORmat$max))
+# # A tibble: 16 x 6
+# range                        n  nsig chr     prop    OR
+# <chr>                    <int> <int> <chr>  <dbl> <dbl>
+# 1 chr11:80000001-90000000  10147   112 11    0.0110  2.35
+# 2 chr12:10000001-20000000  28684   523 12    0.0182  3.89
+# 3 chr16:50000001-60000000  38087   462 16    0.0121  2.59
+# 4 chr18:20000001-30000000   7316    87 18    0.0119  2.54
+# 5 chr19:20000001-30000000   9531   405 19    0.0425  9.06
+# 6 chr2:140000001-150000000  4314   110 02    0.0255  5.44
+# 7 chr2:160000001-170000000  9385   162 02    0.0173  3.68
+# 8 chr2:190000001-200000000 11553   143 02    0.0124  2.64
+# 9 chr3:110000001-120000000 18118   230 03    0.0127  2.71
+# 10 chr3:190000001-198022430 52073   570 03    0.0109  2.33
+# 11 chr3:20000001-30000000    6703   120 03    0.0179  3.82
+# 12 chr3:30000001-40000000   18828   209 03    0.0111  2.37
+# 13 chr3:70000001-80000000    6522    74 03    0.0113  2.42
+# 14 chr7:30000001-40000000   27492   490 07    0.0178  3.80
+# 15 chr7:60000001-70000000   15881   212 07    0.0133  2.85
+# 16 chr9:120000001-130000000 21632   250 09    0.0116  2.47
+
+ggplot(chrDistRang, aes(x = chr, y = OR)) + 
+  geom_boxplot() +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+theme_bw()  
+
+chrDistTC <- modU_comp %>% 
+  mutate(chr = substring(TC, 3, 4),
+         chr = gsub("^0", "", chr)) %>%
+  group_by(TC) %>%
+  mutate(sig = any(sigPair)) %>%
+  dplyr::select(chr, TC, sig) %>%
+  distinct() %>%
+  group_by(chr) %>%
+  summarize(totTC = n(),
+            sigTC = sum(sig)) %>%
+  ungroup() %>%
+  mutate(chr = factor(chr, levels = c(1:22, "X", "Y")),
+         propallTC = totTC/sum(totTC),
+         propsigTC = sigTC/sum(sigTC))
+
+png("paper/chrDistr_TCs.png", width = 2000, height = 1200, res = 300)
+chrDistTC %>%
+  gather(set, prop, 4:5) %>% 
+  mutate(chr = factor(chr, levels = c(1:22, "X", "Y"))) %>%
+  ggplot(aes(x = chr, y = prop, fill = set)) + 
+  geom_bar(stat = "identity", position=position_dodge()) + 
+  theme_bw() +
+  scale_fill_discrete(name = "") +
+  scale_y_continuous(name = "Percentage of CpG-TC pairs") +
+  scale_x_discrete(name = "Chromosome")
+dev.off()
+
+chisq.test(p = chrDistTC$totTC/sum(chrDistTC$totTC), chrDistTC$sigTC)
+chisq.test(chrDistComb$n.x, p = chrDistTC$sigTC/sum(chrDistTC$sigTC))
+chisq.test(chrDistComb$n.y, p = chrDistTC$totTC/sum(chrDistTC$totTC))
 
 
 ## Volcano plot ####
@@ -262,7 +395,7 @@ t
 # Multi    6135     3530  3965
 chisq.test(t[, -3])
 # X-squared = 68.441, df = 1, p-value < 2.2e-16
-t[1]/t[2]/t[3]*t[4]
+t[2]/t[1]/t[4]*t[3]
 # [1] 0.8114236
 addmargins(prop.table(t))
 # Inverse  Positive      Both       Sum
@@ -285,7 +418,7 @@ dist_all <- ggplot(modU_comp, aes(x = Distance, color = sigPair)) + geom_density
   scale_color_discrete(name = "", labels = c("Non-significant", "Significant")) +
   scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
-  scale_y_continuous(name = "", breaks = NULL) + 
+  scale_y_continuous(name = "") + 
   ggtitle("CpG-TC Distance (all pairs)") + 
   theme(plot.title = element_text(hjust = 0.5))
 
@@ -522,15 +655,14 @@ modU_comp %>%
   filter(sigPair) %>%
   mutate(Direction = ifelse(FC > 0, "Positive", "Inverse")) %>%
   ggplot(aes(x = Distance, y = FC/10, color = Direction)) + 
-  geom_point() + 
+  geom_point(alpha = 0.1) + 
   theme_bw() + 
   scale_color_manual(name = "", 
                      breaks = c("Inverse", "Positive"),
                      values = c("red", "blue")) +
   scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
-  scale_y_continuous(name = "log2 FC/10% Methylation",
-                     limits = c(-0.5, 0.5)) + 
+  scale_y_continuous(name = "log2 FC/10% Methylation") + 
   ggtitle("CpG-TC Distance vs Effect") + 
   theme(plot.title = element_text(hjust = 0.5))
 dev.off()
@@ -566,14 +698,17 @@ modU_Annot <- modU %>%
   as_tibble() %>%
   dplyr::select(CpG, TC, FC, p.value, sigPair) %>%
   left_join(CpGsSum, by = "CpG") %>%
-  left_join(dplyr::select(methyAnnot, CpG, UCSC_RefGene_Name), by = "CpG") %>%
+  left_join(dplyr::select(methyAnnot, CpG, UCSC_RefGene_Group, UCSC_RefGene_Name), by = "CpG") %>%
   left_join(dplyr::select(expAnnot, TC, GeneSymbol_Affy), by = "TC") %>%
   mutate(GeneAffy = strsplit(GeneSymbol_Affy, ";"))
 
+## Create list with genes in common in Affy and Illumina Annotation
 methGenes <- unique(unlist(modU_Annot$UCSC_RefGene_Name))
 expGenes <- unique(unlist(modU_Annot$GeneAffy))
 comGenes <- intersect(methGenes, expGenes)
 
+## Create list with genes in common in Affy and Illumina Annotation that are
+## part of an eQTM
 modU_Annot_f <- modU_Annot %>%
   filter(sigPair)
 
@@ -582,7 +717,7 @@ expGenesf <- unique(unlist(modU_Annot_f$GeneAffy))
 comGenesf <- intersect(methGenesf, expGenesf)
 
 modU_Annot_f %>%
-  select(CpG, UCSC_RefGene_Name) %>%
+  dplyr::select(CpG, UCSC_RefGene_Name) %>%
   distinct() %>%
   summarize(n = n(),
             n_g = sum(UCSC_RefGene_Name != ""),
@@ -591,7 +726,7 @@ modU_Annot_f %>%
 
 modU_Annot_f2 <- modU_Annot_f %>%
   filter(sapply(UCSC_RefGene_Name, function(x) any(x %in% comGenes))) %>%
-  mutate(match = GeneAffy %in% UCSC_RefGene_Name)
+  mutate(match = sapply(seq_len(n()), function(x) any(GeneAffy[[x]] %in% UCSC_RefGene_Name[[x]])))
 
 
 table(modU_Annot_f2$match)
@@ -616,6 +751,49 @@ annotated %>%
   summarize(N = sum(found),
             P = mean(found))
 
+
+# Enrichment by gene position based on annotation ####
+modU_Annot <- modU_Annot %>%
+  mutate(gene_match = sapply(seq_len(n()), function(x) any(GeneAffy[[x]] %in% UCSC_RefGene_Name[[x]])))
+
+t <- table(modU_Annot$sigPair, modU_Annot$gene_match)
+t[1]/t[2]/t[3]*t[4]
+chisq.test(t)
+
+## Expand CpGs and TCs to make all pairs between CpG Gene and TC
+## Restrict pairs where CpG gene and TC gene match
+modU_gene_pairs <- modU_Annot %>%
+  filter(gene_match) %>%
+  mutate(Gene_Group = strsplit(UCSC_RefGene_Group, ";")) %>%
+  unnest(Gene_Group, UCSC_RefGene_Name) %>%
+  mutate(GeneAffy = strsplit(GeneSymbol_Affy, ";")) %>%
+  unnest(GeneAffy) %>%
+  dplyr::select(CpG, TC, FC, sigPair, p.value, UCSC_RefGene_Name, Gene_Group, GeneAffy) %>%
+  filter(UCSC_RefGene_Name == GeneAffy) %>%
+  distinct()
+  
+
+gpos <- c("TSS1500", "TSS200", "5'UTR", "1stExon", "Body", "3'UTR")
+names(gpos) <- gpos
+#gpos <- c(as.list(gpos), list(Comb = c("TSS1500", "5'UTR", "Body")))
+
+ORs <- lapply(gpos, function(x) {
+  t <- table(modU_gene_pairs$Gene_Group %in% x, modU_gene_pairs$sigPair)
+  list(p.value = chisq.test(t)$p.value, OR = t[1]/t[2]/t[3]*t[4])
+  }) %>%
+  Reduce(f = cbind)
+colnames(ORs) <- gpos  
+
+
+ORs2 <- lapply(gpos, function(x) {
+  cot <- filter(modU_gene_pairs, sigPair)
+  t <- table(cot$Gene_Group %in% x, sign(cot$FC))
+  list(p.value = chisq.test(t)$p.value, OR = t[1]/t[2]/t[3]*t[4])
+}) %>%
+  Reduce(f = cbind)
+colnames(ORs2) <- gpos  
+
+
 # Compare models ####
 sigDf2 <- modC %>%
   as_tibble() %>%
@@ -624,6 +802,8 @@ sigDf2 <- modC %>%
 ### Significant pairs
 nrow(sigDf2)
 # [1] 39749
+
+table(sign(sigDf2$FC))
 
 ### Significant TC
 length(unique(sigDf2$TC))
@@ -644,7 +824,6 @@ sigDf2 %>%
   summary()
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
 # 1.000   1.000   2.000   4.473   5.000 128.000
-
 sigDf2 %>%
   group_by(CpG) %>%
   summarize(n = n()) %>%
@@ -680,6 +859,8 @@ sink("paper/CpGs_type2.txt")
 addmargins(t)
 sink()
 
+
+
 ## Data.frame with groups comparison
 ### General
 adjList <- list(pairs = paste(sigDf$CpG, sigDf$TC, sep = "-"),
@@ -696,10 +877,13 @@ modCompDF <- data.frame(Adj = lengths(adjList),
                     Cell = lengths(cellList),
                     Shared = unlist(Map(function(x, y) length(intersect(x, y)), adjList, cellList)),
                     AdjSp = unlist(Map(function(x, y) length(setdiff(x, y)), adjList, cellList)),
-                    CellSp = unlist(Map(function(x, y) length(setdiff(x, y)), cellList, adjList)))
-sink("paper/ModelsStatisticComparison.txt")
-modCompDF[c(1, 2, 4, 3), ]
-sink()
+                    CellSp = unlist(Map(function(x, y) length(setdiff(x, y)), cellList, adjList))) %>%
+  mutate(AdjSpProp = round(AdjSp/Adj*100, 1),
+         CellSpProp = round(CellSp/Cell*100, 1))
+write.table(modCompDF[c(1, 2, 4, 3), c(1:4, 6, 5, 7)], sep = "\t",
+            file = "paper/ModelsStatisticComparison.txt",
+            row.names = FALSE, quote = FALSE)
+
 
 ### Per CpG type
 adjCpgs <- CpGsSum %>% 
@@ -718,10 +902,13 @@ modCompDF2 <- data.frame(Adj = lengths(adjCpgs),
                         Cell = lengths(cellCpgs),
                         Shared = unlist(Map(function(x, y) length(intersect(x, y)), adjCpgs, cellCpgs)),
                         AdjSp = unlist(Map(function(x, y) length(setdiff(x, y)), adjCpgs, cellCpgs)),
-                        CellSp = unlist(Map(function(x, y) length(setdiff(x, y)), cellCpgs, adjCpgs)))
-sink("paper/ModelsStatisticComparisonCpG.txt")
-modCompDF2[c(1, 2, 4, 5, 3, 6), ]
-sink()
+                        CellSp = unlist(Map(function(x, y) length(setdiff(x, y)), cellCpgs, adjCpgs))) %>%
+  mutate(AdjSpProp = round(AdjSp/Adj*100, 1),
+         CellSpProp = round(CellSp/Cell*100, 1))
+
+write.table(modCompDF2[1:5, c(1:4, 6, 5, 7)], sep = "\t",
+            file = "paper/ModelsStatisticComparisonCpG.txt",
+            row.names = FALSE, quote = FALSE)
 
 parPlot <- CpGsSum %>%
   left_join(select(CpGsSum2, CpG, Combined), by = "CpG") %>%
@@ -756,95 +943,154 @@ png("paper/CompModelsCpGs.png", width = 2500, height = 2500, res = 300)
 parPlot
 dev.off()
 
-## Volcano plot
-png("paper/volcano_all_adjCells.png", width = 2000, height = 2000, res = 300)
-volcano_plot(modC$p.value, modC$FC/100, paste(modC$CpG, modC$TC), 
-             tPV = -log10(1e-8), tFC = 0.01, show.labels = FALSE) +
-  geom_point(alpha = 0.1)
-dev.off()
 
-
-
-## Compare estimates ####
-### Merge dataset
+### Merge dataset ####
 mergeTB <- modU %>%
   left_join(modC, by = c("CpG", "TC")) %>%
   as_tibble() %>%
   filter(sigPair.x == TRUE | sigPair.y == TRUE) %>%
-  mutate(sigType = ifelse(sigPair.x == TRUE, ifelse(sigPair.y == TRUE, "Both", "Adjusted"), "Cell"))
+  mutate(sigType = ifelse(sigPair.x == TRUE, ifelse(sigPair.y == TRUE, "Both", "Main"), "Cell"))
+
+
+t <- mergeTB %>%
+  group_by(TC) %>%
+  summarize(main = sum(sigPair.x),
+            cell = sum(sigPair.y)) %>%
+  gather(model, nCpG, 2:3) %>%
+  group_by(model) %>%
+  summarize(mono = sum(nCpG == 1),
+            multi = sum(nCpG > 1))
+prop.table(data.matrix(t[,-1]), margin = 1)
+
+
+## Distribution CpGs/TC
+CpG_plot2 <- mergeTB %>%
+  group_by(CpG) %>%
+  summarize(main = sum(sigPair.x),
+            cell = sum(sigPair.y)) %>%
+  gather(model, nTC, 2:3) %>%
+  filter(nTC > 0) %>%
+  mutate(model = factor(model, levels = c("main", "cell")),
+         TCs = ifelse(nTC > 10, "10+", 
+                      ifelse(nTC > 5, "6-10", nTC)),
+         TCs = factor(TCs, levels = c(1:5, "6-10", "10+"))) %>%
+  group_by(model, TCs) %>%
+  summarize(n = n()) %>%
+  group_by(model) %>%
+  mutate(p = n/sum(n)*100) %>%
+  ggplot(aes(x = TCs, y = p, fill = model)) +  
+  geom_bar(position = "dodge", stat = "identity") +
+  scale_y_continuous("Percentage CpGs")  +
+  ggtitle("TCs associated with each CpG") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none")
+
+
+TC_plot2 <- mergeTB %>%
+  group_by(TC) %>%
+  summarize(main = sum(sigPair.x),
+            cell = sum(sigPair.y)) %>%
+  gather(model, nCpG, 2:3) %>%
+  filter(nCpG > 0) %>%
+  mutate(model = factor(model, levels = c("main", "cell")),
+         CpGs = ifelse(nCpG > 20, "20+", 
+                       ifelse(nCpG > 10, "11-20", 
+                              ifelse(nCpG > 5, "6-10", nCpG))),
+         CpGs = factor(CpGs, levels = c(1:5, "6-10", "11-20", "20+"))) %>%
+  group_by(model, CpGs) %>%
+  summarize(n = n()) %>%
+  group_by(model) %>%
+  mutate(p = n/sum(n)*100) %>%
+  ggplot(aes(x = CpGs, y = p, fill = model)) +  
+  geom_bar(position = "dodge", stat = "identity") +
+  scale_y_continuous("Percentage TCs")  +
+  scale_fill_discrete(name = "Model", labels = c("Main", "Cell")) +
+  ggtitle("CpGs associated with each TC") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+        
+png("paper/eQTMs_CpGs_TC_distr_cell.png", width = 2500, height = 1500, res = 300)
+plot_grid(CpG_plot2, TC_plot2, labels = "AUTO", ncol = 2)
+dev.off()
 
 
 png("paper/CompModelsP_values.png", width = 2500, height = 2500, res = 300)
 ggplot(mergeTB, aes(x = -log10(p.value.y), y = -log10(p.value.x), col = sigType)) +
   geom_point() +
   scale_x_continuous(name = "Cell adjusted") + 
-  scale_y_continuous("Adjusted") + 
+  scale_y_continuous("Main model") + 
   ggtitle("-log10 p-values comparative") +
   theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
   scale_color_discrete(name = "")
 dev.off()
 
+## Distance distribution
+png("paper/dist_distr_cell.png", width = 2500, height = 1500, res = 300)
+rbind(mutate(sigDf, mod = "Main"), 
+                    mutate(sigDf2, mod = "Cell")) %>%
+  inner_join(overDF, by = c("TC", "CpG")) %>%
+  ggplot(aes(x = Distance, color = mod)) +
+  geom_density() +
+  theme_bw() +
+  scale_color_discrete(name = "Model") +
+  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
+                     labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
+  scale_y_continuous(name = "") + 
+  ggtitle("CpG-TC Distance (significant pairs)") + 
+  theme(plot.title = element_text(hjust = 0.5))
+dev.off()
+
+rbind(mutate(sigDf, mod = "Main"), 
+      mutate(sigDf2, mod = "Cell")) %>%
+  inner_join(overDF, by = c("TC", "CpG")) %>%
+  group_by(mod) %>%
+  summarize(m = median(Distance), 
+            l = quantile(Distance, 0.25), 
+            h = quantile(Distance, 0.75))
+
 # mergeTB <- mergeTB %>%
 #   mutate(Diff.pval = pnorm(abs(FC.x - FC.y)/sqrt(SD.x**2 + SD.y**2), lower.tail = FALSE), 
 #          isDiff = ifelse(Diff.pval < 0.05, "Different", "Equal"))
-
-png("paper/CompModelsEstimates.png", width = 2500, height = 2500, res = 300)
-ggplot(mergeTB, aes(x = FC.y, y = FC.x, col = sigType)) +
-  geom_point() +
+## Compare estimates
+top <- filter(mergeTB, sigType == "Both") %>%
+  ggplot(aes(x = FC.y/10, y = FC.x/10)) +
+  geom_point(color = "black") +
   scale_x_continuous(name = "Cell adjusted") + 
-  scale_y_continuous("Adjusted") + 
+  scale_y_continuous("Main model") + 
   ggtitle("Estimates comparative") +
   theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
   scale_color_discrete(name = "")
+
+bottom <- filter(mergeTB, sigType != "Both") %>%
+  ggplot(aes(x = FC.y/10, y = FC.x/10, col = sigType)) +
+  geom_point() +
+  scale_x_continuous(name = "Cell adjusted") + 
+  scale_y_continuous("Main model") + 
+ # ggtitle("Estimates comparative") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none") +
+  scale_color_discrete(name = "") +
+  facet_wrap(. ~ sigType) +
+  geom_smooth(method = "lm")
+
+png("paper/CompModelsEstimates.png", width = 2500, height = 2500, res = 300)
+plot_grid(top, bottom, nrow = 2)
 dev.off()
 
+filter(mergeTB, sigType == "Main") %>% lm(FC.y ~ FC.x, .) %>% summary()
+filter(mergeTB, sigType == "Cell") %>% lm(FC.y ~ FC.x, .) %>% summary()
+filter(mergeTB, sigType == "Both") %>% lm(FC.y ~ FC.x, .) %>% summary()
 
 ## Run enrichment on specific TCs ####
 ### Define function to run enrichment
-computeGOs <- function(df){
-  
-  genesv <- df$sig
-  names(genesv) <- df$TC
-  
-  Data <- new("topGOdata", 
-              description = "GO analysis of TCs",
-              ontology = "BP",
-              allGenes = genesv,
-              annot = annFUN.db,
-              nodeSize = 10,
-              affyLib = "hta20transcriptcluster.db")
-  
-  class <- runTest(Data, algorithm = "classic", statistic = "fisher")
-  elim <- runTest(Data, algorithm = "elim", statistic = "fisher")
-  weigth <- runTest(Data, algorithm = "weight", statistic = "fisher")
-  mixed <- runTest(Data, algorithm = "weight01", statistic = "fisher")
-  
-  
-  finTab <- GenTable(Data, 
-                     classic = class, 
-                     elim = elim, 
-                     weight = weigth, 
-                     w0 = mixed,
-                     orderBy = "weight",
-                     ranksOf = "elim",
-                     topNodes = length(score(class)))
-  gos <- list(classic = class, elim = elim,
-              weigth = weigth, 
-              mixed = mixed)
-  list(gos = gos, table = finTab)
-}
 adjTCs <- setdiff(adjList$TC, cellList$TC)
 adjGenes <- modU %>%
   group_by(TC) %>%
   summarize(sig = factor(
     ifelse(any(TC %in% adjTCs & sigPair), 1, 0)))
 adjGOs <- computeGOs(adjGenes)
-
-a <- adjGOs$table %>%
-  filter(w0 < 0.01 & classic < 0.01) %>%
-  arrange(w0)
-write.table(a[, c("GO.ID", "Term", "w0", "classic")], file = "paper/GOsAdjSp.txt", 
-            quote = FALSE, col.names = TRUE, sep = "\t", row.names = FALSE)
 
 cellTCs <- setdiff(cellList$TC, adjList$TC)
 cellGenes <- modC %>%
@@ -853,12 +1099,32 @@ cellGenes <- modC %>%
     ifelse(any(TC %in% cellTCs & sigPair), 1, 0)))
 cellGOs <- computeGOs(cellGenes)
 
-a <- cellGOs$table %>%
-  filter(w0 < 0.01 & classic < 0.01) %>%
-  arrange(w0)
-write.table(a[, c("GO.ID", "Term", "w0", "classic")], file = "paper/GOsCellSp.txt", 
-            quote = FALSE, col.names = TRUE,
-            sep = "\t", row.names = FALSE)
+save(adjGOs, cellGOs, file = "paper/GOobjectsCompModels.Rdata")
+
+## It does not work on server. Run locally.
+library(GOfuncR)
+library(topGO)
+library(dplyr)
+server <- "//isg10174/data/WS_HELIX/HELIX_analyses/expr_met_SM/paper/"
+
+load(paste0(server, "GOobjectsCompModels.Rdata"))
+
+## Load categories and functions from eQTM_interpreation.R
+## Select GOs with p-value < 0.001
+mainMod <- addImmunityInfo(subset(adjGOs$table, as.numeric(w0) < 0.001))
+cellMod <- addImmunityInfo(subset(cellGOs$table, as.numeric(w0) < 0.001))
+
+
+tail(sort(sapply(top_GOs, function(x) sum(grepl(x, mainMod$parent)))))
+
+write.table(mainMod[, c("GO.ID", "GO_term", "w0", "parent", "immune")], 
+            file = paste0(server, "/GOsMainModSp.txt"), 
+            quote = FALSE, col.names = TRUE, sep = "\t", row.names = FALSE)
+write.table(cellMod[, c("GO.ID", "GO_term", "w0", "parent", "immune")], 
+            file = paste0(server, "/GOsCellModSp.txt"), 
+            quote = FALSE, col.names = TRUE, sep = "\t", row.names = FALSE)
+
+
 
 
 ## Compare CpGs with Reinius ####
@@ -893,12 +1159,45 @@ data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, cellCpGs), "Fstat"
 
 png("paper/CompModelsCpGCellSpecific.png", width = 1500, height = 1000, res = 300)
 data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, cellCpGs), "Fstat"],
-           Type = rep(c("Adjusted", "Cell"), c(length(adjCpGs), length(cellCpGs)))) %>%
+           Type = rep(c("Main", "Cell"), c(length(adjCpGs), length(cellCpGs)))) %>%
   ggplot(aes(y = log10(Fstat), x = Type, fill = Type)) + 
   geom_boxplot() +
   theme_bw() +
   scale_x_discrete(name = "")
 dev.off()
+
+
+data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, cellCpGs), "v"],
+           Type = rep(c("Main", "Cell"), c(length(adjCpGs), length(cellCpGs)))) %>%
+  ggplot(aes(y = log10(Fstat), x = Type, fill = Type)) + 
+  geom_boxplot() +
+  theme_bw() +
+  scale_x_discrete(name = "")
+
+library(vegan)
+sh <- diversity(FlowSorted.Blood.450k.compTable[, 3:8])
+
+data.frame(sh = sh[c(adjCpGs, cellCpGs)],
+           Type = rep(c("Main", "Cell"), c(length(adjCpGs), length(cellCpGs)))) %>%
+  ggplot(aes(y = sh, x = Type, fill = Type)) + 
+  geom_boxplot() +
+  theme_bw() +
+  scale_x_discrete(name = "")
+
+cells <- FlowSorted.Blood.450k.compTable[c(adjCpGs, cellCpGs), 3:8]
+cells$Type <- rep(c("Main", "Cell"), c(length(adjCpGs), length(cellCpGs)))
+  
+cells %>% 
+  mutate(min = pmin(CD8T, CD4T, NK, Bcell, Mono, Gran, na.rm = TRUE),
+         max = pmax(CD8T, CD4T, NK, Bcell, Mono, Gran, na.rm = TRUE),
+         r = max - min) %>% 
+  ggplot(aes(x = Type, y = r)) + geom_boxplot()
+
+cells %>% 
+  mutate(min = pmin(CD8T, CD4T, NK, Bcell, Mono, Gran, na.rm = TRUE),
+         max = pmax(CD8T, CD4T, NK, Bcell, Mono, Gran, na.rm = TRUE),
+         r = max - min) %>% 
+  ggplot(aes(x = Type, y = r)) + geom_boxplot()
 
 
 ## Compare with other eQTM studies (Bonder) PMID: 27918535 ####

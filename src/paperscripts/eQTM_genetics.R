@@ -12,6 +12,8 @@ library(cowplot)
 library(tidyr)
 library(GenomicRanges)
 library(snpStats)
+library(MASS)
+library(topGO)
 
 load("results/MethComBatExpResidualsNoCellAdj/allres_simP_cpgs.Rdata")
 load("results/preprocessFiles/allOverlaps.Rdata")
@@ -152,13 +154,6 @@ comMQTLs.f <- comMQTLs %>%
   filter(!(sign(b) != sign(beta) & A1 == Ref)) %>%
   filter(!(sign(b) == sign(beta) & A1 == Alt))
 
-## Merge ARIES and HELIX results to test direction
-comMQTLs2 <- rbind(comCisQTL, comTransQTL) %>%
-  left_join(select(HELIXannot, SNP, Ref, Alt), by = "SNP") %>%
-  inner_join(left_join(mQTLs, select(ARIESannot, SNP, Ref, Alt), by = "SNP"),
-             by = c("SNP", "gene")) %>%
-  as_tibble()
-
 comCpGs <- unique(comMQTLs.f$gene)
 
 meQTLTab <- CpGsNum %>%
@@ -175,6 +170,37 @@ meQTLTab <- CpGsNum %>%
 #  2         2427       2408           65   0.335      0.333       0.00898
 #  3         1117       1117           24   0.351      0.351       0.00754
 #  4+        1141       1131           48   0.356      0.352       0.0150
+
+comMQTLs.f %>%
+  select(SNP, gene) %>%
+  distinct() %>%
+  group_by(gene) %>%
+  summarize(CpGs = n()) %>%
+  pull(., CpGs) %>%
+  summary()
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
+# 1.0    13.0    40.0    76.9    98.5  1816.0
+
+comMQTLs.f %>%
+  dplyr::select(SNP, gene) %>%
+  distinct() %>%
+  group_by(gene) %>%
+  summarize(CpGs = n()) %>%
+  mutate(eQTM = ifelse(gene %in% unique(sigDf$CpG), "eQTM", "non-eQTM")) %>%
+  group_by(eQTM) %>%
+  summarize(m = median(CpGs),
+            l = quantile(CpGs, 0.25),
+            h = quantile(CpGs, 0.75))
+
+comMQTLs.f %>%
+  dplyr::select(SNP, gene) %>%
+  distinct() %>%
+  group_by(gene) %>%
+  summarize(CpGs = n()) %>%
+  mutate(eQTM = ifelse(gene %in% unique(sigDf$CpG), "eQTM", "non-eQTM")) %>%
+  glm.nb(CpGs ~ eQTM, .) %>%
+  summary()
+
 
 
 write.table(meQTLTab[, c(1:2, 5, 3, 6, 4, 7)], file = "paper/meQTL_sum.tab",
@@ -286,6 +312,56 @@ sum(unique(mergedDf$TC) %in% codingTCs)
 sum(unique(mergedDf$TC) %in% codingTCs)/sum(unique(sigDf$TC) %in% codingTCs)
 
 
+mergedDf <- rbind(comCisQTL, comTransQTL) %>%
+  mutate(CpG = gene) %>%
+  dplyr::select(-gene, -SNP) %>%
+  inner_join(sigDF, by = "CpG") %>%
+  inner_join(eQTL, by = c("snps", "TC")) %>%
+  dplyr::select(-sigPair)
+
+mergedDf %>%
+  select(CpG, TC) %>%
+  distinct() %>%
+  group_by(TC) %>%
+  summarize(CpGs = n()) %>%
+  pull(., CpGs) %>%
+  summary()
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
+# 1.000   1.000   2.000   3.593   4.000  80.000
+
+mergedDf %>%
+  select(SNP, TC) %>%
+  distinct() %>%
+  group_by(TC) %>%
+  summarize(CpGs = n()) %>%
+  pull(., CpGs) %>%
+  summary()
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
+# 1.0    19.0    62.0   104.2   145.0  1114.0
+
+
+
+mergedDf %>%
+  select(SNP, CpG) %>%
+  distinct() %>%
+  group_by(CpG) %>%
+  summarize(CpGs = n()) %>%
+  pull(., CpGs) %>%
+  summary()
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
+# 1.00   17.00   51.00   88.27  122.00 1286.00
+
+mergedDf %>%
+  select(TC, CpG) %>%
+  distinct() %>%
+  group_by(CpG) %>%
+  summarize(CpGs = n()) %>%
+  pull(., CpGs) %>%
+  summary()
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
+# 1.00    1.00    1.00    1.87    2.00   21.00
+
+
 ## Check replication in GTEx
 ### Download data (https://gtexportal.org/home/datasets) - 28/11/2019
 tar --extract --file=data/GTEx_Analysis_v8_eQTL.tar GTEx_Analysis_v8_eQTL/Whole_Blood.v8.signif_variant_gene_pairs.txt.gz
@@ -293,9 +369,9 @@ mv GTEx_Analysis_v8_eQTL/ data/
   
 
 ### Example
-# SNP: rs12543539
-# CpG: cg10173586
-# Gene: PLEC (TC08001737.hg.1)
+# SNP: rs11585123
+# CpG: cg15580684
+# Gene: AJAP1 (TC01000080.hg.1)
 
 plink <- read.plink("/home/isglobal.lan/cruiz/data/WS_HELIX/HELIX_preproc/gwas/Final_data_HRCimp_QC2/HELIX.impQC.rs")
 load("results/preprocessFiles/Methylation_GRSet.RData")
@@ -307,36 +383,44 @@ colnames(se) <- se$HelixID
 ## Common samples
 comSamps <- intersect(intersect(rownames(plink$geno), colnames(gset)), colnames(se))
 
-alleles <- plink$map["rs12543539", c("allele.1", "allele.2")]
+alleles <- plink$map["rs11585123", c("allele.1", "allele.2")]
 alleles <- c(paste0(alleles[1], alleles[1]),
              paste0(alleles[1], alleles[2]),
              paste0(alleles[2], alleles[2]))
 
-dat <- data.frame(geno = as.numeric(plink$geno[comSamps, "rs12543539"]),
-                  methy = as.numeric(getBeta(gset["cg10173586", comSamps])),
-                  gexp = as.numeric(assay(se["TC08001737.hg.1", comSamps])))
+dat <- data.frame(geno = as.numeric(plink$geno[comSamps, "rs11585123"]),
+                  methy = as.numeric(getBeta(gset["cg15580684", comSamps])),
+                  gexp = as.numeric(assay(se["TC01000080.hg.1", comSamps])))
 dat$geno <- alleles[dat$geno]
 
 sm <- ggplot(dat, aes(x = factor(geno), y = methy)) + 
   geom_boxplot() +
-  scale_x_discrete(name = "rs12543539") +
-  scale_y_continuous(name = "cg10173586") +
+  scale_x_discrete(name = "rs11585123") +
+  scale_y_continuous(name = "cg15580684") +
   theme_bw()
 
 sg <- ggplot(dat, aes(x = factor(geno), y = gexp)) + 
   geom_boxplot() +
-  scale_x_discrete(name = "rs12543539") +
-  scale_y_continuous(name = "TC08001737.hg.1") +
+  scale_x_discrete(name = "rs11585123") +
+  scale_y_continuous(name = "TC01000080.hg.1") +
   theme_bw()
 
   
 me <- ggplot(dat, aes(x = methy, y = gexp)) + 
   geom_point() +
-  scale_x_continuous(name = "cg10173586") +
-  scale_y_continuous(name = "TC08001737.hg.1") +
+  scale_x_continuous(name = "cg15580684") +
+  scale_y_continuous(name = "TC01000080.hg.1") +
   geom_smooth(method = "lm") +
   theme_bw()
 png("paper/eQTMstrio.png", width = 3500, height = 2000, res = 300)
 plot_grid(plot_grid(sm, sg, nrow = 1), me, nrow = 2)
 dev.off()
 
+## Run enrichment analysis genes in trios ####
+## Copy functions from eQTM_interpretation.R
+snpGenes <- df %>%
+  dplyr::select(TC) %>%
+  distinct() %>%
+  mutate(sig = factor(ifelse(TC %in% unique(mergedDf$TC), 1, 0)))
+snpGos <- computeGOs(snpGenes)
+save(snpGos, file = "paper/snpGOs.Rdata")

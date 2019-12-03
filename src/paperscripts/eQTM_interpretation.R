@@ -10,13 +10,13 @@
 # Load data and libraries ####
 library(topGO)
 library(ggplot2)
-library(dplyr)
 library(cowplot)
 library(tidyr)
 library(hta20transcriptcluster.db)
 library(FlowSorted.Blood.450k)
 library(openxlsx)
 library(GenomicRanges)
+library(dplyr)
 
 load("results/MethComBatExpResidualsNoCellAdj/allres_simP_cpgs.Rdata")
 load("results/preprocessFiles/allOverlaps.Rdata")
@@ -43,8 +43,8 @@ CpGsSum <- df %>%
 #'  - classic: get p-value for each GO independent of the other
 #'  - weight01: takes into account the GO hierarchy
 ## We selected only those terms with a p-value < 0.01 in both methods.
-computeGOs <- function(df){
-  
+
+getGOdata <- function(df){
   genesv <- df$sig
   names(genesv) <- df$TC
   
@@ -55,7 +55,11 @@ computeGOs <- function(df){
               annot = annFUN.db,
               nodeSize = 10,
               affyLib = "hta20transcriptcluster.db")
+}
+
+computeGOs <- function(df){
   
+  Data <- getGOdata(df)
   mixed <- runTest(Data, algorithm = "weight01", statistic = "fisher")
   
   
@@ -82,7 +86,7 @@ allGenes <- df %>%
   group_by(TC) %>%
   summarize(sig = factor(ifelse(any(sigPair), 1, 0)))
 allGos <- computeGOs(allGenes)
-
+allGOData <- getGOdata(allGenes)
 
 ## Subtypes
 subtypes <- c("Mono_Inverse", "Mono_Positive", "Multi_Both", "Multi_Inverse", 
@@ -115,6 +119,7 @@ sapply(subtypes_go, function(x) sum(x$table$w0 < 0.001))
 
 ## It does not work on server. Run locally.
 library(GOfuncR)
+library(topGO)
 library(dplyr)
 server <- "//isg10174/data/WS_HELIX/HELIX_analyses/expr_met_SM/paper/"
 
@@ -158,6 +163,7 @@ load(paste0(server, "GOobjects.Rdata"))
 ##' - immunoglobulin production
 ##' - T cell cytokine production
 ##' - humoral immune response mediated by circulating immunoglobulin
+##' - antigen receptor-mediated signaling pathway
 ##' 
 ##' 
 ##' Innate immunity:
@@ -194,6 +200,7 @@ load(paste0(server, "GOobjects.Rdata"))
 
 immune <- c("immune system process", "cell killing")
 adaptive <- c("adaptive immune response",
+              "antigen receptor-mediated signaling pathway",
               "B cell selection",
               "T cell selection",
               "antigen processing and presentation",
@@ -253,40 +260,97 @@ innate <- c("innate immune response",
             "antimicrobial humoral response",
             "inflammatory response to antigenic stimulus")
 
+top_GOs <- subset(get_child_nodes("GO:0008150"), distance == 1)$child_name
+celProc_GOs <- subset(get_child_nodes("GO:0009987"), distance == 1)$child_name
+
+sumF <- function(x, topGOs){
+  selGOs <- topGOs[topGOs %in% x]
+  paste(selGOs, collapse = ";")
+}
+
+
 addImmunityInfo <- function(tab){
   get_parent_nodes(tab$GO.ID) %>%
     group_by(child_go_id) %>%
-    summarize(tag = ifelse(any(c("adaptive immune response", "lymphocyte activation", "antigen processing and presentation") %in% parent_name), "adaptive",
-                           ifelse(any(c("innate immune response", "myeloid leukocyte activation", "myeloid leukocyte mediated immunity", "myeloid leukocyte differentiation", "myeloid leukocyte cytokine production") %in% parent_name), "innate",
-                                  ifelse(any(c("response to cytokine", "immune system process") %in% parent_name), "general", "none")))) %>%
-    mutate(immune = tag != "none", 
+    summarize(parent = ifelse(any(immune %in% parent_name), 
+                              "immune", 
+                              sumF(parent_name, topGOs = top_GOs)), 
+              immune = ifelse(any(adaptive %in% parent_name), 
+                              "adaptive",
+                              ifelse(any(innate %in% parent_name), 
+                                     "innate",
+                                     "undetermined")),
+              GO_term = head(parent_name, 1)) %>%
+    mutate(immune = ifelse(immune == "undetermined" & parent != "immune",
+                           NA, immune),
            GO.ID = child_go_id) %>%
     right_join(tab)  %>%
-    select(GO.ID, Term, w0, classic, immune, tag)
+    select(GO.ID, GO_term, w0, parent, immune)
 }
 
-allMod <- addImmunityInfo(allGos$tab)
-
+## Select GOs with p-value < 0.001
+allMod <- addImmunityInfo(subset(allGos$table, as.numeric(w0) < 0.001))
 subtypesTabs <- lapply(subtypes_go, function(x){
-  addImmunityInfo(x$tab)
+  subset(addImmunityInfo(x$tab), as.numeric(w0) < 0.001)
 })
   
   
-write.table(allMod[, c("GO.ID", "Term", "w0", "classic", "tag")], 
+write.table(allMod[, c("GO.ID", "GO_term", "w0", "parent", "immune")], 
             file = paste0(server, "/GOsAllGenes.txt"), 
             quote = FALSE, col.names = TRUE, sep = "\t", row.names = FALSE)
 
 lapply(names(subtypesTabs), function(x){
-  write.table(subtypesTabs[[x]][, c("GO.ID", "Term", "w0", "classic", "tag")], 
+  write.table(subtypesTabs[[x]][, c("GO.ID", "GO_term", "w0", "parent", "immune")], 
               file = paste0(server, "/GOs", x, ".txt"), 
               quote = FALSE, col.names = TRUE, sep = "\t", row.names = FALSE)
   
 })
-table(allMod$tag)
-a <- lapply(subtypesTabs, function(x){
-  c(n = nrow(x), imm = sum(x$immune), immP = round(mean(x$immune)*100, 1), 
-       adap = sum(x$tag == "adaptive"), innate = sum(x$tag == "innate"))
-}) %>%
+
+## Summarize GOs results
+### Including all eQTMs
+list(c(n = nrow(allMod), imm = sum(allMod$parent == "immune"), 
+       immP = round(mean(allMod$parent == "immune")*100, 1)), 
+     table(allMod$immune),
+     round(prop.table(table(allMod$immune))*100, 1)
+)
+
+tail(sort(sapply(top_GOs, function(x) sum(grepl(x, allMod$parent)))))
+# response to stimulus 
+# 10 
+# positive regulation of biological process 
+# 11 
+# metabolic process 
+# 14 
+# regulation of biological process 
+# 20 
+# biological regulation 
+# 21 
+# cellular process 
+# 28 
+
+## Summarize GOs results
+### Per CpG type
+lapply(subtypesTabs, function(x){
+  list(c(n = nrow(x), imm = sum(x$parent == "immune"), 
+    immP = round(mean(x$parent == "immune")*100, 1)), 
+    table(x$immune),
+    round(prop.table(table(x$immune))*100, 1)
+  )
+})
+
+lapply(subtypesTabs, function(y){
+  tail(sort(sapply(top_GOs, function(x) 
+    sum(grepl(x, y$parent)))))
+})
+### Proportion immune vs others
+goTab <- sapply(subtypesTabs, function(x) table(x$parent == "immune"))
+chisq.test(goTab)
+
+### Proportion adaptive/innate
+immuneTab <- sapply(subtypesTabs, function(x) table(x$immune)[c("adaptive", "innate", "undetermined")])
+immuneTab[is.na(immuneTab)] <- 0
+chisq.test(immuneTab)
+
   data.frame() %>%
   t() %>%
   data.frame() %>%
@@ -390,6 +454,59 @@ methGenePos %>%
   group_by(group) %>%
   summarize_if(is.numeric, sum) %>%
   getOR(cols = c("Intergenicin", "Intergenicou"), df = .)
+
+## Gene position vs methylation levels
+continTable <- function(df, var1, var2){
+  t <- table(df[[var1]], df[[var2]])
+  print(t)
+  print(chisq.test(t))
+  print(t - chisq.test(t)$expected)
+  print(t[2, ]/chisq.test(t)$expected[2, ])
+}
+continTable(methyAnnot, "TSS1500", "median_cat")
+continTable(methyAnnot, "Body", "median_cat")
+continTable(methyAnnot, "GeneRel", "median_cat")
+continTable(methyAnnot, "TSS200", "median_cat")
+continTable(methyAnnot, "FirstExon", "median_cat")
+continTable(methyAnnot, "UTR5", "median_cat")
+
+png("paper/medianMethvsGenePos.png", width = 3000, height = 2000, res = 300)
+top <- as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, TSS200, TSS1500, UTR5, FirstExon, Body, UTR3, GeneRel, median) %>%
+  right_join(CpGsSum, by = "CpG") %>%
+  mutate(GeneRel = ifelse(GeneRel == "Intergenic", TRUE, FALSE)) %>%
+  gather(Region, Val, 2:8) %>%
+  filter(Val == TRUE) %>%
+  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM"),
+         Region = ifelse(Region == "GeneRel", "Intergenic", Region)) %>%
+  ggplot(aes(x = Region, y = median, fill = Significant)) +
+  scale_x_discrete(name = "Position with respect gene", 
+                   limits = c("TSS1500", "TSS200", "UTR5", "FirstExon", "Body", "UTR3", "Intergenic")) +
+  scale_y_continuous(name = "Median methylation") +
+  scale_fill_discrete(name = "") +
+  geom_boxplot() +
+  theme_bw()
+
+down <- as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, TSS200, TSS1500, UTR5, FirstExon, Body, UTR3, GeneRel, median) %>%
+  right_join(CpGsSum, by = "CpG") %>%
+  mutate(GeneRel = ifelse(GeneRel == "Intergenic", TRUE, FALSE)) %>%
+  gather(Region, Val, 2:8) %>%
+  filter(Val == TRUE) %>%
+  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM"),
+         Region = ifelse(Region == "GeneRel", "Intergenic", Region),
+         Combined = factor(Combined, levels = c("Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both", "Non-significant"))) %>%
+  ggplot(aes(x = Region, y = median, fill = Combined)) +
+  scale_x_discrete(name = "Position with respect gene", 
+                   limits = c("TSS1500", "TSS200", "UTR5", "FirstExon", "Body", "UTR3", "Intergenic")) +
+  scale_y_continuous(name = "Median methylation") +
+  scale_fill_manual(name = "CpG Type", values = c("#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73", "#555555")) +
+  geom_boxplot() +
+  theme_bw()
+plot_grid(top, down, nrow = 2)
+dev.off()
 
 
 ## Methylation levels ####
@@ -569,6 +686,37 @@ combIsland %>%
   theme_bw() 
 dev.off()
 
+## CpG Island vs methylation levels
+png("paper/medianMethvsIsland.png", width = 3000, height = 2000, res = 300)
+top <- as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, Relation_to_Island, median) %>%
+  right_join(CpGsSum, by = "CpG") %>%
+  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM")) %>%
+  ggplot(aes(x = Relation_to_Island, y = median, fill = Significant)) +
+  geom_boxplot() +
+  scale_x_discrete(name = "CpG island", limits = islandStates) +
+  scale_y_continuous(name = "Median methylation") +
+  scale_fill_discrete(name = "") +
+  theme_bw()
+
+down <- as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, Relation_to_Island, median) %>%
+  right_join(CpGsSum, by = "CpG") %>%
+  mutate(Combined = factor(Combined, levels = c("Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both", "Non-significant"))) %>%
+  ggplot(aes(x = Relation_to_Island, y = median, fill = Combined)) +
+  geom_boxplot() +
+  scale_x_discrete(name = "CpG island", limits = islandStates) +
+  scale_fill_manual(name = "CpG Type", values = c("#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73", "#555555")) +
+  scale_y_continuous(name = "Median methylation") +
+  theme_bw()
+
+plot_grid(top, down, nrow = 2)
+dev.off()
+
+
+
 ## Chromatin states ####
 chromStates <- c("TssA", "TssAFlnk", "TxFlnk", "TxWk", "Tx", "EnhG", "Enh",
                  "ZNF.Rpts", "Het", "TssBiv", "BivFlnk", "EnhBiv", "ReprPC",
@@ -580,7 +728,7 @@ methChromSt <- as_tibble(methyAnnot) %>%
   select(CpG, eval(chromStates)) %>%
   right_join(CpGsSum, by = "CpG") %>%
   group_by(Combined) %>%
-  summarize_at(chromStates, list(sum, sum2)) %>%
+  summarize_at(chromStates, list(sum = sum, sum2 = sum2)) %>%
   mutate(Type0 = ifelse(Combined == "Non-significant", "Non-significant", "Significant"))
 
 
@@ -635,9 +783,114 @@ combChromSt %>%
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "ROADMAP chromatin states") +
   scale_fill_manual(name = "CpG Type", values = c("#999999", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
-  facet_grid(~ Group, scales = "free", space = "free_x") +
+  facet_wrap(~ Group, scales = "free_x") +
   theme_bw() 
 dev.off()
+
+
+## Chromatin states vs methylation levels
+png("paper/medianMethvsChromState.png", width = 3000, height = 2000, res = 300)
+  as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, eval(chromStates), median) %>%
+  right_join(CpGsSum, by = "CpG") %>%
+  gather(Region, Val, 2:16) %>%
+  filter(Val == TRUE) %>%
+  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM"),
+         Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
+                               ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
+                                      ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
+                                             ifelse(Region %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
+                                                    ifelse(Region %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Region)
+                                             )
+                                      )
+                               )
+         ), 
+         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
+         )
+  ) %>%
+  ggplot(aes(x = Region, y = median, fill = Significant)) +
+  geom_boxplot() +
+  facet_wrap(~ Group, scales = "free_x") +
+  scale_x_discrete(name = "ROADMAP chromatin states") +
+  scale_y_continuous(name = "Median methylation") +
+  scale_fill_discrete(name = "") +
+  theme_bw()
+dev.off()
+
+
+
+### Test variables modifying probability of being an eQTM ####
+as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  right_join(CpGsSum, by = "CpG") %>%
+  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM"),
+         Significant = factor(Significant, levels = c("Non-eQTM", "eQTM")),
+         median_trans = -(median-0.5)^2) %>%
+  glm(formula(paste("Significant ~ median_trans + Relation_to_Island + GeneRel +",
+                    paste(chromStates, collapse = "+"))), 
+      family = "binomial", .) %>%
+  summary()
+# Estimate Std. Error z value Pr(>|z|)
+# (Intercept)               -2.11824    0.02788 -75.971  < 2e-16 ***
+#   median_trans               8.12840    0.08689  93.549  < 2e-16 ***
+#   Relation_to_IslandN_Shelf  0.35235    0.02950  11.944  < 2e-16 ***
+#   Relation_to_IslandN_Shore  0.33235    0.02007  16.561  < 2e-16 ***
+#   Relation_to_IslandOpenSea  0.35733    0.01930  18.513  < 2e-16 ***
+#   Relation_to_IslandS_Shelf  0.31476    0.03116  10.102  < 2e-16 ***
+#   Relation_to_IslandS_Shore  0.35610    0.02126  16.746  < 2e-16 ***
+#   GeneRelIntergenic         -0.16639    0.01493 -11.148  < 2e-16 ***
+#   TssATRUE                   0.15682    0.01827   8.586  < 2e-16 ***
+#   TssAFlnkTRUE               0.45341    0.01651  27.461  < 2e-16 ***
+#   TxFlnkTRUE                 0.01230    0.02097   0.587  0.55753
+# TxWkTRUE                   0.25240    0.01429  17.663  < 2e-16 ***
+#   TxTRUE                    -0.01657    0.02075  -0.799  0.42453
+# EnhGTRUE                   0.25193    0.02256  11.169  < 2e-16 ***
+#   EnhTRUE                    0.32913    0.01399  23.528  < 2e-16 ***
+#   ZNF.RptsTRUE               0.56330    0.03724  15.128  < 2e-16 ***
+#   HetTRUE                   -0.07398    0.02513  -2.943  0.00325 **
+#   TssBivTRUE                -0.10580    0.02520  -4.199 2.68e-05 ***
+#   BivFlnkTRUE                0.32190    0.02201  14.624  < 2e-16 ***
+#   EnhBivTRUE                -0.04924    0.02015  -2.444  0.01453 *
+#   ReprPCTRUE                -0.02174    0.01627  -1.337  0.18132
+# ReprPCWkTRUE               0.18674    0.01590  11.746  < 2e-16 ***
+#   QuiesTRUE                  0.08442    0.01547   5.456 4.88e-08 ***
+  
+
+## Test variables explaining differences between CpG Types
+
+## Mono_Inverse
+
+runFullModel <- function(type) {
+  as_tibble(methyAnnot) %>%
+    mutate(CpG = Name) %>%
+    right_join(CpGsSum, by = "CpG") %>%
+    filter(Type != "Non-significant") %>%
+    mutate(SelCpG = ifelse(Combined %in% type, "Sel", "Other"),
+           SelCpG = factor(SelCpG, levels = c("Other", "Sel")),
+           median_trans = -(median-0.5)^2) %>%
+    glm(formula(paste("SelCpG ~ median_trans + Relation_to_Island + GeneRel +",
+                      paste(chromStates, collapse = "+"))), 
+        family = "binomial", .) %>%
+    summary()
+}
+filt <- function(mod){
+  mod$coefficient[mod$coefficient[, 4] < 0.05,]
+}
+runFullModel("Mono_Inverse")
+filt(runFullModel("Mono_Inverse"))
+runFullModel("Mono_Positive")
+filt(runFullModel("Mono_Positive"))
+runFullModel("Multi_Inverse")
+filt(runFullModel("Multi_Inverse"))
+runFullModel("Multi_Positive")
+filt(runFullModel("Multi_Positive"))
+runFullModel("Multi_Both")
+filt(runFullModel("Multi_Both"))
+
+
+runFullModel(c("Mono_Inverse", "Mono_Positive"))
+runFullModel(c("Multi_Positive", "Mono_Positive"))
 
 ## Blood cell types ####
 png("paper/CpGEnrichBloodTypes.png", width = 3000, height = 2000, res = 300)
@@ -693,82 +946,6 @@ FlowSorted.Blood.450k.compTable %>%
 # F-statistic:  2936 on 5 and 384844 DF,  p-value: < 2.2e-16
 # 
 
-## Gemes Clusters ####
-### PMID: 24656863
-#### Usamos solo los del paper principal para tener más que los que están asociados a genotipos
-cpgClus1 <- read.xlsx("data/CpGCluster_1.xlsx", startRow = 2)
-
-cpgClus1GR <- makeGRangesFromDataFrame(cpgClus1, start.field = "Start.Position.(hg19)",
-                                       end.field = "End.Position.(hg19)")
-
-seqlevelsStyle(cpgClus1GR) <- "UCSC"
-cpgClus <- methyAnnot %>%
-  makeGRangesFromDataFrame(start.field = "pos", end.field = "pos") %>%
-  findOverlaps(cpgClus1GR)
-cpgClus <- rownames(methyAnnot)[from(cpgClus)]
-
-genoClus <- read.xlsx("data/CpGClusterGeno.xlsx", startRow = 2)
-genoClusvec <- unlist(strsplit(genoClus$CpG.Probe.Names, " "))
-
-cegmeQTLs <- read.xlsx("data/meQTLs_CeGEMs.xlsx", startRow = 2)
-
-CEGEMS <- CpGsSum %>%
-  mutate(clus = CpG %in% cpgClus,
-         meql = CpG %in% unique(cegmeQTLs$CpG),
-    geno = CpG %in% genoClusvec) %>%
-  group_by(Combined) %>%
-  summarize(clusin = sum(clus),
-            clusou = sum2(clus),
-            meQTLin = sum(meql),
-            meQTLou = sum2(meql),
-            genoin = sum(geno),
-            genoou = sum2(geno)) %>%
-  mutate(Type0 = ifelse(Combined == "Non-significant", "Non-Significant", "Significant"))
-  
-cegs <- c("clus", "meQTL", "geno")
-
-allCeg <- CEGEMS %>%
-  group_by(Type0) %>%
-  select(ends_with("in"), ends_with("ou")) %>%
-  summarize_all(list(sum)) %>%
-  arrange(desc(Type0)) %>%
-  g(cegs) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", 1:3) %>%
-  mutate(Type = "Significant")
-
-typesCeg <- lapply(types, function(t){
-  CEGEMS %>%
-    filter(Combined %in% c(t, "Non-significant")) %>%
-    group_by(Combined) %>%
-    select(ends_with("in"), ends_with("ou")) %>%
-    summarize_all(list(sum)) %>%
-    g(cegs) %>%
-    as_tibble() %>%
-    mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-    gather("Region", "Value", 1:3) %>%
-    mutate(Type = t)
-})
-combCeg <- Reduce(rbind, typesCeg)
-combCeg <- rbind(allCeg, combCeg)
-
-png("paper/CpGEnrichCEGEMS.png", width = 3000, height = 2000, res = 300)
-combCeg %>%
-  spread(par, Value) %>%
-  mutate(Type = factor(Type, levels = c("Significant", "Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both"))) %>%
-  ggplot(aes(x = Region, y = OR, fill = Type)) + 
-  geom_bar(stat = "identity", position=position_dodge()) + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "GeMes classification", 
-                   limits = cegs,
-                   labels = c("Contiguous Cluster", "meQTL", "Genotype-Controlled Cluster")) +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
-  theme_bw() 
-dev.off()
 
 ## Age variability ####
 agedf <- read.csv2("data/DiffMethyAgeCpGs.csv", as.is = TRUE)
@@ -837,27 +1014,30 @@ dev.off()
 ewasdf <- read.delim(gzfile("data/EWAS_Catalog_03-07-2019.txt.gz"))
 
 ## Restrict to results in blood and European
-ewasdfF <- mutate(ewasdf, Category = ifelse(Outcome %in% c("DNA methylation", "Changes in DNA methylation"), "Exposure", "Outcome")) %>%
+ewasdfF <- ewasdf %>%
   filter(grepl("Whole|Peripheral", Tissue)) %>%
   filter(!N_EUR == "-" & (N_EAS != "-" | N_SAS != "-" | N_AFR != "-" | N_AMR != "-" | N_OTH == "-"))
 
 ewasCatSum <- ewasdfF %>%
-  select(CpG, Category) %>%
+  select(CpG) %>%
   mutate(Present = "Present") %>%
   distinct() %>%
   right_join(CpGsSum, by = "CpG") %>%
-  mutate(Category = ifelse(is.na(Category), "None", Category), 
-         Present = ifelse(is.na(Present), "Absent", Present)) %>%
+  mutate(Present = ifelse(is.na(Present), "Absent", Present)) %>%
   as_tibble()
 
 ewasCatSum %>% 
-  select(-Category) %>%
   distinct() %>%
-  summarize(n = sum(Present == "Present"),
-            mean = mean(Present == "Present"))
-# n  
-# <int> <dbl>
-# 143384 0.371
+  summarize(all = sum(Present == "Present"),
+            eQTMs = sum(Present == "Present" & Type != "Non-significant")) %>%
+  mutate(eQTMs_cat = eQTMs/all)
+# all eQTMs eQTMs_cat
+# 143384 16083     0.112
+
+t <- table(ewasCatSum$Present, ewasCatSum$Type != "Non-significant")
+t[1]/t[2]/t[3]*t[4]
+
+
 a <- ewasCatSum %>% 
   group_by(CpG) %>% 
   summarize(Cat = ifelse(n() == 2, "Exposure-Outcome", Category),
@@ -1053,10 +1233,13 @@ combExps %>%
 dev.off()
 
 ## EWAS Atlas #### 
-## Download time: 06/09/2019
+## Download time: 27/11/2019
 atAssoc <- read.delim("data/EWAS_Atlas_associations.tsv")
 atStudy <- read.delim("data/EWAS_Atlas_studies.tsv")
 atCohort <- read.delim("data/EWAS_Atlas_cohorts.tsv")
+
+
+
 
 ## Combined traits (web page does not allow to download all files)
 # traitsL <- lapply(1:5, function(x) read.csv(paste0("data/tableExport", x, ".csv")))
@@ -1080,27 +1263,19 @@ atlasDFsel <- atlasDF %>%
 
 
 atlasSum <- CpGsSum %>%
-  mutate(Changed = CpG %in% atlasDFsel$Probe.id,
-         Behavior = CpG %in% filter(atlasDFsel, Type == "behavior")$Probe.id, 
-         Cancer = CpG %in% filter(atlasDFsel, Type == "cancer")$Probe.id,
-         Environment = CpG %in% filter(atlasDFsel, Type == "environmental factor")$Probe.id, 
-         Disease = CpG %in% filter(atlasDFsel, Type == "non-cancer disease")$Probe.id, 
-         Phenotype = CpG %in% filter(atlasDFsel, Type == "phenotype")$Probe.id) %>%
-  group_by(Combined) %>%
-  summarize(Changedin = sum(Changed),
-            Changedou = sum(!Changed),
-            Cancerin = sum(Cancer),
-            Cancerou = sum(!Cancer),
-            Environmentin = sum(Environment),
-            Environmentou = sum(!Environment),
-            Behaviorin = sum(Behavior),
-            Behaviorou = sum(!Behavior),
-            Diseasein = sum(Disease),
-            Diseaseou = sum(!Disease),
-            Phenotypein = sum(Phenotype),
-            Phenotypeou = sum(!Phenotype)) %>%
-  mutate(Type0 = ifelse(Combined == "Non-significant", "Non-significant", "Significant"))
-eff <- c("Changed", "Behavior", "Disease", "Environment", "Cancer", "Phenotype")
+  mutate(Changed = CpG %in% atlasDFsel$Probe.id) %>%
+  distinct() 
+atlasSum %>%
+  summarize(all = sum(Changed),
+            eQTMs = sum(Changed & Type != "Non-significant")) %>%
+  mutate(eQTMs_cat = eQTMs/all)
+# all eQTMs eQTMs_cat
+# 54599  9547     0.175
+
+t <- table(atlasSum$Changed, atlasSum$Type != "Non-significant")
+t[1]/t[2]/t[3]*t[4]
+
+
 
 ## Get summary statistics
 atlasSum %>% 
