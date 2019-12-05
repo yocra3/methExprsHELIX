@@ -91,6 +91,6 @@ overDF <- data.frame(CpG = rownames(gset)[to(allOver)], TC = gr$TC[from(allOver)
                      CpG_Pos = start(rowRanges(gset))[to(allOver)], 
                      TC_Pos = start(gr)[from(allOver)], 
                      TC_strand = strand(gr)[from(allOver)])
-overDF$Distance <- ifelse(overDF$TC_strand == "+", overDF$TC_Pos - overDF$CpG_Pos, 
-                          overDF$CpG_Pos - overDF$TC_Pos)
+overDF$Distance <- ifelse(overDF$TC_strand == "+", overDF$CpG_Pos - overDF$TC_Pos, 
+                          overDF$TC_Pos - overDF$CpG_Pos)
 save(overDF, file = "results/preprocessFiles/allOverlaps.Rdata")

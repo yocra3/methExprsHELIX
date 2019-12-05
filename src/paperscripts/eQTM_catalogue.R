@@ -444,10 +444,32 @@ modU_comp %>%
             l = quantile(Distance, 0.25), 
             h = quantile(Distance, 0.75))
 
-# sigPair     m       l       h
-# <lgl>   <int>   <dbl>   <dbl>
-#   1 FALSE      14 -236288 236864
-# 2 TRUE    -1333 -117011  84618.
+## Distance per direction
+dist_dir <- modU_comp %>%
+  filter(sigPair) %>%
+  mutate(Direction = ifelse(FC > 0, "Positive", "Inverse")) %>%
+  ggplot(aes(x = Distance, color = Direction)) + geom_density() + 
+  theme_bw() + 
+  scale_color_discrete(name = "") +
+  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
+                     labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
+  scale_y_continuous(name = "") + 
+  ggtitle("CpG-TC Distance (significant pairs)") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+modU_comp %>% 
+  filter(sigPair) %>%
+  mutate(Direction = ifelse(FC > 0, "Positive", "Inverse")) %>%
+  group_by(Direction) %>%
+  summarize(m = median(Distance), 
+            l = quantile(Distance, 0.25), 
+            h = quantile(Distance, 0.75))
+
+
+png("paper/distance_distr.png", width = 2000, height = 2000, res = 300)
+plot_grid(dist_all, dist_dir, nrow = 2)
+dev.off()
+
 
 
 ## Signif per groups
@@ -595,16 +617,17 @@ ks.test(abs(subset(sigDf, FC > 0)$FC)/10,
 modU_comp %>%
   filter(sigPair) %>%
   mutate(Dir = ifelse(FC > 0, "Positive", "Inverse"),
-         FC = abs(FC)/10) %>%
+         FC = FC/10) %>%
   group_by(Dir) %>%
   summarize(m = median(FC),
             l = quantile(FC, 0.25),
             h = quantile(FC, 0.75))
 
-# Dir           m       l      h
-# <chr>     <dbl>   <dbl>  <dbl>
-#   1 Inverse  0.122 0.0655 0.240
-# 2 Positive 0.112 0.0607 0.214
+# Dir           m       l       h
+# <chr>     <dbl>   <dbl>   <dbl>
+#   1 Inverse  -0.122 -0.240  -0.0655
+# 2 Positive  0.112  0.0607  0.214
+# 
 
 effect_groups <- modU_comp %>%
   filter(sigPair) %>%
@@ -1026,6 +1049,24 @@ ggplot(mergeTB, aes(x = -log10(p.value.y), y = -log10(p.value.x), col = sigType)
 dev.off()
 
 ## Distance distribution
+png("paper/dist_distr_main_eQTMs.png", width = 2500, height = 1500, res = 300)
+mergeTB %>%
+  filter(sigPair.x) %>%
+  inner_join(overDF, by = c("TC", "CpG")) %>%
+  mutate(mod = ifelse(sigType == "Both", "Common", sigType)) %>%
+  ggplot(aes(x = Distance, color = mod)) +
+  geom_density() +
+  theme_bw() +
+  scale_color_discrete(name = "") +
+  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
+                     labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
+  scale_y_continuous(name = "") + 
+  ggtitle("CpG-TC Distance") + 
+  theme(plot.title = element_text(hjust = 0.5))
+dev.off()
+
+
+
 png("paper/dist_distr_cell.png", width = 2500, height = 1500, res = 300)
 rbind(mutate(sigDf, mod = "Main"), 
                     mutate(sigDf2, mod = "Cell")) %>%
@@ -1041,9 +1082,10 @@ rbind(mutate(sigDf, mod = "Main"),
   theme(plot.title = element_text(hjust = 0.5))
 dev.off()
 
-rbind(mutate(sigDf, mod = "Main"), 
-      mutate(sigDf2, mod = "Cell")) %>%
+mergeTB %>%
+  filter(sigPair.x) %>%
   inner_join(overDF, by = c("TC", "CpG")) %>%
+  mutate(mod = ifelse(sigType == "Both", "Common", sigType)) %>%
   group_by(mod) %>%
   summarize(m = median(Distance), 
             l = quantile(Distance, 0.25), 
@@ -1083,6 +1125,42 @@ filter(mergeTB, sigType == "Main") %>% lm(FC.y ~ FC.x, .) %>% summary()
 filter(mergeTB, sigType == "Cell") %>% lm(FC.y ~ FC.x, .) %>% summary()
 filter(mergeTB, sigType == "Both") %>% lm(FC.y ~ FC.x, .) %>% summary()
 
+
+## Run enrichment on CpGs ####
+mainCpGs <- setdiff(adjList$CpG, cellList$CpG)
+comCpGs <- intersect(adjList$CpG, cellList$CpG)
+
+methyAnnot %>% 
+  filter(CpG %in% c(mainCpGs, comCpGs)) %>%
+  mutate(GeneRel = ifelse(UCSC_RefGene_Name == "", "Intergenic", "Genic"),
+         Type = ifelse(CpG %in% mainCpGs, "Main", "Common")) %>%
+  dplyr::select(GeneRel, Type) %>%
+  table()
+
+methyAnnot %>% 
+  filter(CpG %in% c(mainCpGs, comCpGs)) %>%
+  mutate(Type = factor(ifelse(CpG %in% mainCpGs, "Main", "Common"))) %>%
+  glm(formula(paste("Type ~", paste(chromStates, collapse = "+"))), .,
+     family = "binomial") %>%
+  summary()
+
+
+
+mergeTB_Annot <- mergeTB %>%
+  filter(sigPair.x) %>%
+  dplyr::select(CpG, TC, sigPair.x, sigType) %>%
+  left_join(dplyr::select(methyAnnot, CpG, UCSC_RefGene_Group, UCSC_RefGene_Name), by = "CpG") %>%
+  left_join(dplyr::select(expAnnot, TC, GeneSymbol_Affy), by = "TC") %>%
+  mutate(GeneAffy = strsplit(GeneSymbol_Affy, ";"))
+
+
+mergeTB_Annot %>%
+  mutate(match = sapply(seq_len(n()), function(x) any(GeneAffy[[x]] %in% UCSC_RefGene_Name[[x]]))) %>%
+  group_by(sigType) %>%
+  summarize(p = mean(match),
+            n = sum(match))
+
+
 ## Run enrichment on specific TCs ####
 ### Define function to run enrichment
 adjTCs <- setdiff(adjList$TC, cellList$TC)
@@ -1092,14 +1170,14 @@ adjGenes <- modU %>%
     ifelse(any(TC %in% adjTCs & sigPair), 1, 0)))
 adjGOs <- computeGOs(adjGenes)
 
-cellTCs <- setdiff(cellList$TC, adjList$TC)
-cellGenes <- modC %>%
+comTCs <- intersect(cellList$TC, adjList$TC)
+comGenes <- modU %>%
   group_by(TC) %>%
   summarize(sig = factor(
-    ifelse(any(TC %in% cellTCs & sigPair), 1, 0)))
-cellGOs <- computeGOs(cellGenes)
+    ifelse(any(TC %in% comTCs & sigPair), 1, 0)))
+comGOs <- computeGOs(comGenes)
 
-save(adjGOs, cellGOs, file = "paper/GOobjectsCompModels.Rdata")
+save(adjGOs, comGOs, file = "paper/GOobjectsCompModels.Rdata")
 
 ## It does not work on server. Run locally.
 library(GOfuncR)
@@ -1112,10 +1190,11 @@ load(paste0(server, "GOobjectsCompModels.Rdata"))
 ## Load categories and functions from eQTM_interpreation.R
 ## Select GOs with p-value < 0.001
 mainMod <- addImmunityInfo(subset(adjGOs$table, as.numeric(w0) < 0.001))
-cellMod <- addImmunityInfo(subset(cellGOs$table, as.numeric(w0) < 0.001))
+comMod <- addImmunityInfo(subset(comGOs$table, as.numeric(w0) < 0.001))
 
 
 tail(sort(sapply(top_GOs, function(x) sum(grepl(x, mainMod$parent)))))
+tail(sort(sapply(top_GOs, function(x) sum(grepl(x, comMod$parent)))))
 
 write.table(mainMod[, c("GO.ID", "GO_term", "w0", "parent", "immune")], 
             file = paste0(server, "/GOsMainModSp.txt"), 
@@ -1130,36 +1209,37 @@ write.table(cellMod[, c("GO.ID", "GO_term", "w0", "parent", "immune")],
 ## Compare CpGs with Reinius ####
 data(FlowSorted.Blood.450k.compTable)
 adjCpGs <- setdiff(adjList$CpG, cellList$CpG)
+comCpGs <- intersect(adjList$CpG, cellList$CpG)
 cellCpGs <- setdiff(cellList$CpG, adjList$CpG)
 
-data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, cellCpGs), "Fstat"],
-           Type = rep(c("Adj", "Cell"), c(length(adjCpGs), length(cellCpGs)))) %>%
+data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, comCpGs), "Fstat"],
+           Type = rep(c("Main", "Common"), c(length(adjCpGs), length(comCpGs)))) %>%
   lm(formula = log10(Fstat) ~ Type, data = .) %>%
   summary()
   
+
 # Call:
 #   lm(formula = log10(Fstat) ~ Type, data = .)
 # 
 # Residuals:
 #   Min      1Q  Median      3Q     Max
-# -3.6491 -0.3193 -0.0387  0.3510  2.1680
+# -4.3185 -0.3776 -0.0170  0.4231  2.5337
 # 
 # Coefficients:
 #   Estimate Std. Error t value Pr(>|t|)
-# (Intercept)  1.26598    0.00460  275.21   <2e-16 ***
-#   TypeCell     0.16409    0.01114   14.73   <2e-16 ***
+# (Intercept) 0.841632   0.004882  172.40   <2e-16 ***
+#   TypeMain    0.424345   0.007086   59.88   <2e-16 ***
 #   ---
 #   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 # 
-# Residual standard error: 0.5934 on 20061 degrees of freedom
-# (73 observations deleted due to missingness)
-# Multiple R-squared:  0.0107,    Adjusted R-squared:  0.01065
-# F-statistic: 216.9 on 1 and 20061 DF,  p-value: < 2.2e-16
-# 
+# Residual standard error: 0.6626 on 35063 degrees of freedom
+# (163 observations deleted due to missingness)
+# Multiple R-squared:  0.09279,   Adjusted R-squared:  0.09276
+# F-statistic:  3586 on 1 and 35063 DF,  p-value: < 2.2e-16
 
 png("paper/CompModelsCpGCellSpecific.png", width = 1500, height = 1000, res = 300)
-data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, cellCpGs), "Fstat"],
-           Type = rep(c("Main", "Cell"), c(length(adjCpGs), length(cellCpGs)))) %>%
+data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, comCpGs), "Fstat"],
+           Type = rep(c("Main", "Common"), c(length(adjCpGs), length(comCpGs)))) %>%
   ggplot(aes(y = log10(Fstat), x = Type, fill = Type)) + 
   geom_boxplot() +
   theme_bw() +
@@ -1167,37 +1247,100 @@ data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, cellCpGs), "Fstat"
 dev.off()
 
 
-data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, cellCpGs), "v"],
-           Type = rep(c("Main", "Cell"), c(length(adjCpGs), length(cellCpGs)))) %>%
-  ggplot(aes(y = log10(Fstat), x = Type, fill = Type)) + 
+## Compare TCs with Blueprint ####
+bluep <- readRDS("data/mean_mlogfpkm_dt.RDS")
+
+## Select blood cell types
+bluep 
+
+## Select genes
+mainTCs <- setdiff(adjList$TC, cellList$TC)
+mainGenes <- filter(expAnnot, probeset_id %in% mainTCs)$GeneSymbol_Affy
+mainGenes <- unlist(strsplit(mainGenes, ";"))
+
+comTCs <- intersect(adjList$TC, cellList$TC)
+comGenes <- filter(expAnnot, probeset_id %in% comTCs)$GeneSymbol_Affy
+comGenes <- unlist(strsplit(comGenes, ";"))
+
+## Remove genes regulated by different TCs in both models
+mainGenes.f <- setdiff(mainGenes, comGenes)
+comGenes.f <- setdiff(comGenes, mainGenes)
+
+bluep_s <- bluep %>%
+  as_tibble() %>%
+  spread(celltype, log2fpkm)
+
+bluep_mat <- rbind(filter(bluep_s, gene %in% mainGenes.f) %>% mutate(mod = "main"),
+                   filter(bluep_s, gene %in% comGenes.f) %>% mutate(mod = "common"))
+bluep_mat$v <- matrixStats::rowVars(data.matrix(bluep_mat[, -c(1, ncol(bluep_mat))]))
+wilcox.test(log(v) ~ factor(mod), bluep_mat, conf.int = TRUE)
+bluep_mat %>% group_by(mod) %>% summarize(m = median(log(v)))
+## Los datos tienen muchos valores pequeños dp del log. Esto tira la media 
+## muy para abajo en los genes especificos del main
+
+png("paper/CompModelsTCCellSpecific.png", width = 1500, height = 1000, res = 300)
+bluep_mat %>%
+  ggplot(aes(x = mod, y = log(v), fill = mod)) +
   geom_boxplot() +
   theme_bw() +
   scale_x_discrete(name = "")
+dev.off()
 
-library(vegan)
-sh <- diversity(FlowSorted.Blood.450k.compTable[, 3:8])
 
-data.frame(sh = sh[c(adjCpGs, cellCpGs)],
-           Type = rep(c("Main", "Cell"), c(length(adjCpGs), length(cellCpGs)))) %>%
-  ggplot(aes(y = sh, x = Type, fill = Type)) + 
-  geom_boxplot() +
+## Compare with previous analysis
+load("data/resultsList_filt.Rdata")
+comRes <- datalist[intersect(comCpGs, names(datalist))]
+intTCs <- intersect(comTCs, rownames(datalist[[1]]$crude) )
+
+crudeTrans <- lapply(comRes, function(x) x$crude[intTCs, ]) %>%
+  Reduce(f = rbind) %>%
+  mutate(CpG = CPG, TC = trans) %>%
+  left_join(dplyr::select(overDF, CpG, CpG_Pos) %>% distinct(), by = "CpG") %>% 
+  left_join(dplyr::select(overDF, TC, TC_Pos, TC_strand) %>% distinct(), by = "TC") %>%
+  mutate(Distance =  ifelse(TC_strand == "+", CpG_Pos - TC_Pos, TC_Pos - CpG_Pos))
+
+mainRes <- datalist[intersect(mainCpGs, names(datalist))]
+spTCs <- intersect(mainTCs, rownames(datalist[[1]]$crude) )
+
+spTrans <- lapply(mainRes, function(x) x$crude[spTCs, ]) %>%
+  Reduce(f = rbind) %>%
+  mutate(CpG = CPG, TC = trans) %>%
+  left_join(dplyr::select(overDF, CpG, CpG_Pos) %>% distinct(), by = "CpG") %>% 
+  left_join(dplyr::select(overDF, TC, TC_Pos, TC_strand) %>% distinct(), by = "TC") %>%
+  mutate(Distance =  ifelse(TC_strand == "+", CpG_Pos - TC_Pos, TC_Pos - CpG_Pos))
+
+
+crudeTrans %>%
+  mutate(type = "Common") %>%
+  rbind(mutate(spTrans, type = "Main")) %>%
+  ggplot(aes(x = Distance, y = -log10(P.Value))) +
+  geom_point() +
   theme_bw() +
-  scale_x_discrete(name = "")
+  facet_grid(type ~ .) +
+#  ggtitle("Main model specific eQTMs") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_x_continuous(breaks = c(-3e7, -2e7, -1e7, -1e6, 0, 1e6, 1e7, 2e7, 3e7), 
+                     labels = c("-30Mb", "-20Mb", "-10Mb", "-1Mb", "0", "1Mb", "10Mb", "20Mb", "30Mb"))
 
-cells <- FlowSorted.Blood.450k.compTable[c(adjCpGs, cellCpGs), 3:8]
-cells$Type <- rep(c("Main", "Cell"), c(length(adjCpGs), length(cellCpGs)))
-  
-cells %>% 
-  mutate(min = pmin(CD8T, CD4T, NK, Bcell, Mono, Gran, na.rm = TRUE),
-         max = pmax(CD8T, CD4T, NK, Bcell, Mono, Gran, na.rm = TRUE),
-         r = max - min) %>% 
-  ggplot(aes(x = Type, y = r)) + geom_boxplot()
+cot <- spread(dplyr::select(spTrans, CpG, TC, P.Value), TC, P.Value)
+pac <- cor(-log10(cot[, -1]))
+h <- hclust(as.dist(1 - pac))
 
-cells %>% 
-  mutate(min = pmin(CD8T, CD4T, NK, Bcell, Mono, Gran, na.rm = TRUE),
-         max = pmax(CD8T, CD4T, NK, Bcell, Mono, Gran, na.rm = TRUE),
-         r = max - min) %>% 
-  ggplot(aes(x = Type, y = r)) + geom_boxplot()
+clas <- cutree(h, h = 0.1)
+lapply(1:10, function(x){
+  y <- pac[clas == x, clas == x]
+  summary(y[upper.tri(y)])
+})
+## Select TCs with similar association with CpGS
+tcs1 <- rownames(pac)[clas == 1]
+
+filter(expAnnot, probeset_id %in% tcs1)$start
+
+## Select CpGs associated with TCs with very low p-value
+c1 <- filter(spTrans, TC %in% tcs1 & P.Value < 1e-10)$CpG
+cpgs1 <- names(table(c1)[table(c1) == 5])
+filter(spTrans,  TC %in% tcs1 & CpG %in% cpgs1)
+
 
 
 ## Compare with other eQTM studies (Bonder) PMID: 27918535 ####

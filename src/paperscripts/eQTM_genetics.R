@@ -142,9 +142,9 @@ colnames(HELIXannot) <- c("chr", "SNP", "cm", "pos", "Ref", "Alt")
 
 comMQTLs <- mQTLsH2 %>%
   mutate(gene = CpG) %>%
-  select(SNP, gene, A1, A2, freq, b, se, p, N, r2) %>%
+  dplyr::select(SNP, gene, A1, A2, freq, b, se, p, N, r2) %>%
   semi_join(rbind(comCisQTL, comTransQTL), by = c("SNP", "gene")) %>%
-  inner_join(left_join(mQTLs, select(ARIESannot, SNP, Ref, Alt), by = "SNP"), 
+  inner_join(left_join(mQTLs, dplyr::select(ARIESannot, SNP, Ref, Alt), by = "SNP"), 
              by = c("SNP", "gene")) %>%
   as_tibble()
 
@@ -170,7 +170,35 @@ meQTLTab <- CpGsNum %>%
 #  2         2427       2408           65   0.335      0.333       0.00898
 #  3         1117       1117           24   0.351      0.351       0.00754
 #  4+        1141       1131           48   0.356      0.352       0.0150
+sum(sigDf$CpG %in% comCpGs)
 
+
+meQTLTab2 <- CpGsNum %>%
+  mutate(mQTLin = CpG %in% comCpGs,
+         mQTLOut = !CpG %in% comCpGs) %>%
+  group_by(nCat) %>%
+  summarize_if(is.logical, sum)
+
+ORs <- sapply(c("1", "2", "3", "4+"), function(x){
+  x2 <- data.matrix(subset(meQTLTab2, nCat %in% c("0", x))[, 3:2])
+  OR <- x2[1]/x2[2]/x2[3]*x2[4]
+  p <- chisq.test(x2)$p.value
+  c(OR = OR, p = p)
+  
+})
+meQTL_p <- ORs %>% 
+  t() %>%
+  data.frame() %>%
+  mutate(cat = rownames(.)) %>%
+  ggplot(aes(x = cat, y = OR)) +
+  geom_bar(stat = "identity") +
+  scale_x_discrete(name = "num TCs affected") +
+  scale_y_continuous(name = "meQTLs enrichment", trans = "log2") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+         
+         
 comMQTLs.f %>%
   select(SNP, gene) %>%
   distinct() %>%

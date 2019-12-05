@@ -364,31 +364,7 @@ chisq.test(immuneTab)
 # CpG Enrichment ####
 rownames(methyAnnot) <- methyAnnot$Name
 methyAnnot$GeneRel <- ifelse(methyAnnot$UCSC_RefGene_Name == "", "Intergenic", "Genic")
-
-## Gene position ####
-methGenePos <- as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  select(CpG, TSS200, TSS1500, UTR5, FirstExon, Body, UTR3, GeneRel) %>%
-  right_join(CpGsSum, by = "CpG") %>%
-  group_by(Combined) %>%
-  summarize(Intergenicin = sum(GeneRel == "Intergenic"),
-            Intergenicou = sum(GeneRel != "Intergenic"),
-            TSS1500in = sum(TSS1500),
-            TSS1500ou = sum(!TSS1500),
-            TSS200in = sum(TSS200),
-            TSS200ou = sum(!TSS200),
-            UTR5in = sum(UTR5),
-            UTR5ou = sum(!UTR5),
-            FirstExonin = sum(FirstExon),
-            FirstExonou = sum(!FirstExon),
-            Bodyin = sum(Body),
-            Bodyou = sum(!Body),
-            UTR3in = sum(UTR3),
-            UTR3ou = sum(!UTR3)) %>%
-  mutate(Type0 = ifelse(Combined == "Non-significant", "Non-significant", "Significant"))
-
-types <- c( "Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both")
-gpos <- c("Intergenic", "TSS1500", "TSS200", "UTR5", "FirstExon", "Body", "UTR3")
+types <- c("Both", "Positive", "Inverse")
 
 ## Define vars and function
 getOR <- function(cols, df){
@@ -405,119 +381,17 @@ g <- function(x, gpos, cols = c("in", "ou")){
   sapply(gpos, function(y) getOR(paste0(y, cols), df = x))
 }
 
-allPos <- methGenePos %>%
-  group_by(Type0) %>%
-  select(ends_with("in"), ends_with("ou")) %>%
-  summarize_all(list(sum)) %>%
-  arrange(desc(Type0)) %>%
-  g(gpos) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", 1:7) %>%
-  mutate(Type = "Significant")
-
-typesPos <- lapply(types, function(t){
-  methGenePos %>%
-    filter(Combined %in% c(t, "Non-significant")) %>%
-    group_by(Combined) %>%
-    select(ends_with("in"), ends_with("ou")) %>%
-    summarize_all(list(sum)) %>%
-    g(gpos) %>%
-    as_tibble() %>%
-    mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-    gather("Region", "Value", 1:7) %>%
-    mutate(Type = t)
-})
-combPos <- Reduce(rbind, typesPos)
-combPos <- rbind(allPos, combPos)
-
-png("paper/CpGEnrichGenePos.png", width = 3000, height = 2000, res = 300)
-combPos %>%
-  spread(par, Value) %>%
-  mutate(Type = factor(Type, levels = c("Significant", "Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both"))) %>%
-  ggplot(aes(x = Region, y = OR, fill = Type)) + 
-  geom_bar(stat = "identity", position=position_dodge()) + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "Position with respect gene", 
-                   limits = c("TSS1500", "TSS200", "UTR5", "FirstExon", "Body", "UTR3", "Intergenic")) +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
-  theme_bw() 
-dev.off()
-
-## Positive vs others UTR5 and Intergenic
-methGenePos %>%
-  filter(Combined != "Non-significant") %>%
-  mutate(group = ifelse(grepl("Positive", Combined), "Positive", "Other")) %>%
-  group_by(group) %>%
-  summarize_if(is.numeric, sum) %>%
-  getOR(cols = c("Intergenicin", "Intergenicou"), df = .)
-
-## Gene position vs methylation levels
-continTable <- function(df, var1, var2){
-  t <- table(df[[var1]], df[[var2]])
-  print(t)
-  print(chisq.test(t))
-  print(t - chisq.test(t)$expected)
-  print(t[2, ]/chisq.test(t)$expected[2, ])
-}
-continTable(methyAnnot, "TSS1500", "median_cat")
-continTable(methyAnnot, "Body", "median_cat")
-continTable(methyAnnot, "GeneRel", "median_cat")
-continTable(methyAnnot, "TSS200", "median_cat")
-continTable(methyAnnot, "FirstExon", "median_cat")
-continTable(methyAnnot, "UTR5", "median_cat")
-
-png("paper/medianMethvsGenePos.png", width = 3000, height = 2000, res = 300)
-top <- as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  select(CpG, TSS200, TSS1500, UTR5, FirstExon, Body, UTR3, GeneRel, median) %>%
-  right_join(CpGsSum, by = "CpG") %>%
-  mutate(GeneRel = ifelse(GeneRel == "Intergenic", TRUE, FALSE)) %>%
-  gather(Region, Val, 2:8) %>%
-  filter(Val == TRUE) %>%
-  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM"),
-         Region = ifelse(Region == "GeneRel", "Intergenic", Region)) %>%
-  ggplot(aes(x = Region, y = median, fill = Significant)) +
-  scale_x_discrete(name = "Position with respect gene", 
-                   limits = c("TSS1500", "TSS200", "UTR5", "FirstExon", "Body", "UTR3", "Intergenic")) +
-  scale_y_continuous(name = "Median methylation") +
-  scale_fill_discrete(name = "") +
-  geom_boxplot() +
-  theme_bw()
-
-down <- as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  select(CpG, TSS200, TSS1500, UTR5, FirstExon, Body, UTR3, GeneRel, median) %>%
-  right_join(CpGsSum, by = "CpG") %>%
-  mutate(GeneRel = ifelse(GeneRel == "Intergenic", TRUE, FALSE)) %>%
-  gather(Region, Val, 2:8) %>%
-  filter(Val == TRUE) %>%
-  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM"),
-         Region = ifelse(Region == "GeneRel", "Intergenic", Region),
-         Combined = factor(Combined, levels = c("Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both", "Non-significant"))) %>%
-  ggplot(aes(x = Region, y = median, fill = Combined)) +
-  scale_x_discrete(name = "Position with respect gene", 
-                   limits = c("TSS1500", "TSS200", "UTR5", "FirstExon", "Body", "UTR3", "Intergenic")) +
-  scale_y_continuous(name = "Median methylation") +
-  scale_fill_manual(name = "CpG Type", values = c("#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73", "#555555")) +
-  geom_boxplot() +
-  theme_bw()
-plot_grid(top, down, nrow = 2)
-dev.off()
-
 
 ## Methylation levels ####
 methMethLevels <- as_tibble(methyAnnot) %>%
   mutate(CpG = Name) %>%
   select(CpG, median_cat) %>%
   right_join(CpGsSum, by = "CpG") %>%
-  group_by(Combined, median_cat) %>%
+  mutate(Direction = factor(Direction, levels = c("Inverse", "Positive", "Both", "Non-significant"))) %>%
+  group_by(Direction, median_cat) %>%
   summarize(n = n()) %>%
   spread(median_cat, n) %>%
-  mutate(Type0 = ifelse(Combined == "Non-significant", "Non-significant", "Significant"), 
+  mutate(Type0 = ifelse(Direction == "Non-significant", "Non-significant", "Significant"), 
          tot = sum(low, medium, high))
 
 cats <- c("low", "medium", "high")
@@ -546,11 +420,11 @@ methMethLevels %>%
 
 
 methMethLevels %>% 
-  select(Combined, low, medium, high) %>%
+  select(Direction, low, medium, high) %>%
   gather(Levels, vals, 2:4) %>%
-  spread(Combined, vals) %>%
-  mutate(Significant = Mono_Inverse + Mono_Positive + Multi_Inverse + Multi_Positive + Multi_Both) %>%
-  gather(CpGtype, vals, 2:8) %>%
+  spread(Direction, vals) %>%
+  mutate(Significant = Both + Positive + Inverse) %>%
+  gather(CpGtype, vals, 2:5) %>%
   mutate(CpGtype = factor(CpGtype, levels = c("Significant", "Non-significant", types))) %>%
   group_by(CpGtype) %>%
   mutate(prop = vals/sum(vals)) %>%
@@ -563,7 +437,7 @@ methMethLevels %>%
 
 allMethLevs <- methMethLevels %>%
   group_by(Type0) %>%
-  select(-Combined) %>%
+  select(-Direction) %>%
   summarize_all(list(sum)) %>%
   arrange(desc(Type0)) %>%
   g2(cats) %>%
@@ -574,11 +448,10 @@ allMethLevs <- methMethLevels %>%
 
 typesMethLevs <- lapply(types, function(t){
   methMethLevels %>%
-    filter(Combined %in% c(t, "Non-significant")) %>%
-    group_by(Combined) %>%
+    filter(Direction %in% c(t, "Non-significant")) %>%
+    group_by(Direction) %>%
     select(-Type0) %>%
     summarize_all(list(sum)) %>%
-    arrange(Combined) %>%
     g2(cats) %>%
     as_tibble() %>%
     mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
@@ -591,7 +464,7 @@ combMethLevs <- rbind(allMethLevs, combMethLevs)
 png("paper/CpGEnrichMethLevels.png", width = 3000, height = 2000, res = 300)
 combMethLevs %>%
   spread(par, Value) %>%
-  mutate(Type = factor(Type, levels = c("Significant", "Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both"))) %>%
+  mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
   ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
@@ -628,25 +501,23 @@ methMethLevels %>%
   summarize_if(is.numeric, sum) %>%
   getOR2(col = "high", df = .)
 
-
-
-
 ## CpG Islands ####
 methIsland <- as_tibble(methyAnnot) %>%
   mutate(CpG = Name) %>%
   select(CpG, Relation_to_Island) %>%
   right_join(CpGsSum, by = "CpG") %>%
-  group_by(Combined, Relation_to_Island) %>%
+  mutate(Direction = factor(Direction, levels = c("Inverse", "Positive", "Both", "Non-significant"))) %>%
+  group_by(Direction, Relation_to_Island) %>%
   summarize(n = n()) %>%
   spread(Relation_to_Island, n) %>%
-  mutate(Type0 = ifelse(Combined == "Non-significant", "Non-significant", "Significant"), 
+  mutate(Type0 = ifelse(Direction == "Non-significant", "Non-significant", "Significant"), 
       tot = sum(Island, N_Shelf, N_Shore, OpenSea, S_Shelf, S_Shore))
 
 islandStates <- c("N_Shelf", "N_Shore", "Island", "S_Shore", "S_Shelf", "OpenSea")
 
 allIsland <- methIsland %>%
   group_by(Type0) %>%
-  select(-Combined) %>%
+  select(-Direction) %>%
   summarize_all(list(sum)) %>%
   arrange(desc(Type0)) %>%
   g2(islandStates) %>%
@@ -657,11 +528,10 @@ allIsland <- methIsland %>%
 
 typesIsland <- lapply(types, function(t){
   methIsland %>%
-    filter(Combined %in% c(t, "Non-significant")) %>%
-    group_by(Combined) %>%
+    filter(Direction %in% c(t, "Non-significant")) %>%
+    group_by(Direction) %>%
     select(-Type0) %>%
     summarize_all(list(sum)) %>%
-    arrange(Combined) %>%
     g2(islandStates) %>%
     as_tibble() %>%
     mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
@@ -674,7 +544,7 @@ combIsland <- rbind(allIsland, combIsland)
 png("paper/CpGEnrichIsland.png", width = 3000, height = 2000, res = 300)
 combIsland %>%
   spread(par, Value) %>%
-  mutate(Type = factor(Type, levels = c("Significant", "Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both"))) %>%
+  mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
   ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
@@ -727,9 +597,10 @@ methChromSt <- as_tibble(methyAnnot) %>%
   mutate(CpG = Name) %>%
   select(CpG, eval(chromStates)) %>%
   right_join(CpGsSum, by = "CpG") %>%
-  group_by(Combined) %>%
+  mutate(Direction = factor(Direction, levels = c("Inverse", "Positive", "Both", "Non-significant"))) %>%
+  group_by(Direction) %>%
   summarize_at(chromStates, list(sum = sum, sum2 = sum2)) %>%
-  mutate(Type0 = ifelse(Combined == "Non-significant", "Non-significant", "Significant"))
+  mutate(Type0 = ifelse(Direction == "Non-significant", "Non-significant", "Significant"))
 
 
 allChromSt <- methChromSt %>%
@@ -745,8 +616,8 @@ allChromSt <- methChromSt %>%
 
 typesChromSt <- lapply(types, function(t){
   methChromSt %>%
-    filter(Combined %in% c(t, "Non-significant")) %>%
-    group_by(Combined) %>%
+    filter(Direction %in% c(t, "Non-significant")) %>%
+    group_by(Direction) %>%
     select(ends_with("sum"), ends_with("sum2")) %>%
     summarize_all(list(sum)) %>%
     g(chromStates, cols = c("_sum", "_sum2")) %>%
@@ -762,7 +633,7 @@ png("paper/CpGEnrichChromStates.png", width = 3000, height = 2000, res = 300)
 combChromSt %>%
   spread(par, Value) %>%
   mutate(Type = factor(Type, 
-                       levels = c("Significant", "Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both")),
+                       levels = c("Significant", "Inverse", "Positive", "Both")),
          Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
                                ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
                                       ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
@@ -955,13 +826,14 @@ agedf <- agedf %>%
          CpG = ILMNID)
 
 ageSum <- CpGsSum %>%
-  select(CpG, Combined) %>%
-  left_join(select(agedf, Dir, CpG), by = "CpG") %>%
+  dplyr::select(CpG, Direction) %>%
+  mutate(Direction = factor(Direction, levels = c("Inverse", "Positive", "Both", "Non-significant"))) %>%
+  left_join(dplyr::select(agedf, Dir, CpG), by = "CpG") %>%
   mutate(Dir = ifelse(is.na(Dir), "Constant", Dir)) %>%
-  group_by(Combined, Dir) %>%
+  group_by(Direction, Dir) %>%
   summarize(n = n()) %>%
   spread(Dir, n) %>%
-  mutate(Type0 = ifelse(Combined == "Non-significant", "Non-significant", "Significant"), 
+  mutate(Type0 = ifelse(Direction == "Non-significant", "Non-significant", "Significant"), 
          Changed = sum(Decreasing, Increasing), 
          tot = sum(Changed, Constant))
 
@@ -969,7 +841,7 @@ ageG <- c("Changed", "Decreasing", "Increasing")
 
 allAge <- ageSum %>%
   group_by(Type0) %>%
-  select(-c(1:2)) %>%
+  dplyr::select(-c(1:2)) %>%
   summarize_all(list(sum)) %>%
   arrange(desc(Type0)) %>%
   g2(ageG) %>%
@@ -978,13 +850,13 @@ allAge <- ageSum %>%
   gather("Region", "Value", 1:3) %>%
   mutate(Type = "Significant")
 
-typesAge <- lapply(types, function(t){
+typesAge <- lapply(c("Inverse", "Positive", "Both"), function(t){
   ageSum %>%
-    filter(Combined %in% c(t, "Non-significant")) %>%
-    group_by(Combined) %>%
-    select(-Type0) %>%
+    filter(Direction %in% c(t, "Non-significant")) %>%
+    group_by(Direction) %>%
+    dplyr::select(-Type0) %>%
     summarize_all(list(sum)) %>%
-    arrange(Combined) %>%
+   # arrange(Combined) %>%
     g2(ageG) %>%
     as_tibble() %>%
     mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
@@ -997,7 +869,7 @@ combAge <- rbind(allAge, combAge)
 png("paper/CpGEnrichAge.png", width = 3000, height = 2000, res = 300)
 combAge %>%
   spread(par, Value) %>%
-  mutate(Type = factor(Type, levels = c("Significant", "Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both"))) %>%
+  mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
   ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
@@ -1019,12 +891,12 @@ ewasdfF <- ewasdf %>%
   filter(!N_EUR == "-" & (N_EAS != "-" | N_SAS != "-" | N_AFR != "-" | N_AMR != "-" | N_OTH == "-"))
 
 ewasCatSum <- ewasdfF %>%
-  select(CpG) %>%
+  dplyr::select(CpG) %>%
   mutate(Present = "Present") %>%
   distinct() %>%
   right_join(CpGsSum, by = "CpG") %>%
   mutate(Present = ifelse(is.na(Present), "Absent", Present)) %>%
-  as_tibble()
+  as_tibble() 
 
 ewasCatSum %>% 
   distinct() %>%
