@@ -1248,10 +1248,14 @@ dev.off()
 
 
 ## Compare TCs with Blueprint ####
-bluep <- readRDS("data/mean_mlogfpkm_dt.RDS")
-
+bluep <- readRDS("data/lognormfpkm_allgenes.RDS")
+bluep_types <- read.delim("data/blueprint_ids.txt")
+bluep_donors <- read.delim("data/Blueprint_donors.txt")
 ## Select blood cell types
-bluep 
+cellTypes <- as.character(unique(subset(bluep_types, Disease == "None" & Tissue == "venous blood" &
+                      !Cell.type %in% c("adult endothelial progenitor cell", "osteoclast"))$Name))
+
+bluep_blood <- bluep[, colnames(bluep) %in% cellTypes]
 
 ## Select genes
 mainTCs <- setdiff(adjList$TC, cellList$TC)
