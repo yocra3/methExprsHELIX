@@ -211,6 +211,7 @@ summary(lm(meth_range ~ median_cat, methyAnnot))
 # Multiple R-squared:  0.2812,    Adjusted R-squared:  0.2812
 # F-statistic: 7.757e+04 on 2 and 396519 DF,  p-value: < 2.2e-16
 
+summary(lm(meth_range ~ factor(median_cat == "medium"), methyAnnot))
 
 ## Expression distribution
 png("paper/ExpressionDistribution.png", width = 2000, height = 1500, res = 300)

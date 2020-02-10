@@ -43,7 +43,7 @@ h2tot <- herm %>%
   geom_boxplot() +
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
   ggtitle("Total Heritability") +
-  scale_x_discrete(name = "num TCs affected") +
+  scale_x_discrete(name = "num of TCs associated with a CpG") +
   scale_y_continuous(name = "h2", limits = c(0, 1)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
@@ -54,7 +54,7 @@ h2SNP <- herm %>%
   geom_boxplot() + 
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
   ggtitle("SNP Heritability") +
-  scale_x_discrete(name = "num TCs affected") +
+  scale_x_discrete(name = "num of TCs associated with a CpG") +
   scale_y_continuous(name = "h2", limits = c(0, 1)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
@@ -240,14 +240,14 @@ meQTL_p <- CpGsNum %>%
   summarize(prop = mean(mQTL)*100) %>%
   ggplot(aes(x = nCat, y = prop)) +
   geom_bar(position = "dodge", stat = "identity") +
-  scale_x_discrete(name = "num TCs affected") +
+  scale_x_discrete(name = "TCs associated with a CpG") +
   scale_y_continuous(name = "CpGs with meQTL (%)") +
   theme_bw() +
   theme(legend.position = "none")
   
 
 png("paper/eQTMsGenetics.png", width = 3500, height = 2000, res = 300)
-plot_grid(plot_grid(h2tot, h2SNP, nrow = 2), meQTL_p, ncol = 2)
+plot_grid(plot_grid(h2tot, h2SNP, nrow = 2, labels = "AUTO"), meQTL_p, ncol = 2, labels = c("", "C"))
 dev.off()
 
 

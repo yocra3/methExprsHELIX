@@ -18,10 +18,11 @@ library(tidyr)
 library(S4Vectors)
 library(MultiDataSet)
 library(ggforce)
-library(topGO)
+#library(topGO)
 library(FlowSorted.Blood.450k)
 library(GenomicRanges)
 library(BSgenome.Hsapiens.UCSC.hg19)
+library(limma)
 
 ## Load datasets ####
 load("results/preprocessFiles/allOverlaps.Rdata")
@@ -415,7 +416,7 @@ sink()
 ## Signif vs no-signif
 dist_all <- ggplot(modU_comp, aes(x = Distance, color = sigPair)) + geom_density() + 
   theme_bw() + 
-  scale_color_discrete(name = "", labels = c("Non-significant", "Significant")) +
+  scale_color_discrete(name = "", labels = c("non-eQTM", "eQTM")) +
   scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
   scale_y_continuous(name = "") + 
@@ -450,7 +451,7 @@ dist_dir <- modU_comp %>%
   mutate(Direction = ifelse(FC > 0, "Positive", "Inverse")) %>%
   ggplot(aes(x = Distance, color = Direction)) + geom_density() + 
   theme_bw() + 
-  scale_color_discrete(name = "") +
+  scale_color_manual(name = "", values = c("#000000", "#009E73")) +
   scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
   scale_y_continuous(name = "") + 
@@ -467,7 +468,7 @@ modU_comp %>%
 
 
 png("paper/distance_distr.png", width = 2000, height = 2000, res = 300)
-plot_grid(dist_all, dist_dir, nrow = 2)
+plot_grid(dist_all, dist_dir, nrow = 2, labels = c("A", "B"))
 dev.off()
 
 
@@ -682,11 +683,11 @@ modU_comp %>%
   theme_bw() + 
   scale_color_manual(name = "", 
                      breaks = c("Inverse", "Positive"),
-                     values = c("red", "blue")) +
+                     values = c("#000000", "#009E73")) +
   scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
-  scale_y_continuous(name = "log2 FC/10% Methylation") + 
-  ggtitle("CpG-TC Distance vs Effect") + 
+  scale_y_continuous(name = "log2 FC/0.1 Methylation") + 
+  ggtitle("CpG-TC distance vs effect size") + 
   theme(plot.title = element_text(hjust = 0.5))
 dev.off()
 
@@ -972,7 +973,7 @@ mergeTB <- modU %>%
   left_join(modC, by = c("CpG", "TC")) %>%
   as_tibble() %>%
   filter(sigPair.x == TRUE | sigPair.y == TRUE) %>%
-  mutate(sigType = ifelse(sigPair.x == TRUE, ifelse(sigPair.y == TRUE, "Both", "Main"), "Cell"))
+  mutate(sigType = ifelse(sigPair.x == TRUE, ifelse(sigPair.y == TRUE, "Common", "Main"), "Cell"))
 
 
 t <- mergeTB %>%
@@ -994,9 +995,9 @@ CpG_plot2 <- mergeTB %>%
   gather(model, nTC, 2:3) %>%
   filter(nTC > 0) %>%
   mutate(model = factor(model, levels = c("main", "cell")),
-         TCs = ifelse(nTC > 10, "10+", 
+         TCs = ifelse(nTC > 10, "11+", 
                       ifelse(nTC > 5, "6-10", nTC)),
-         TCs = factor(TCs, levels = c(1:5, "6-10", "10+"))) %>%
+         TCs = factor(TCs, levels = c(1:5, "6-10", "11+"))) %>%
   group_by(model, TCs) %>%
   summarize(n = n()) %>%
   group_by(model) %>%
@@ -1004,6 +1005,8 @@ CpG_plot2 <- mergeTB %>%
   ggplot(aes(x = TCs, y = p, fill = model)) +  
   geom_bar(position = "dodge", stat = "identity") +
   scale_y_continuous("Percentage CpGs")  +
+  scale_fill_manual(name = "Model", labels = c("Main", "Cell"), 
+                    values = c("#E69F00", "#999999")) +
   ggtitle("TCs associated with each CpG") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
@@ -1012,15 +1015,15 @@ CpG_plot2 <- mergeTB %>%
 
 TC_plot2 <- mergeTB %>%
   group_by(TC) %>%
-  summarize(main = sum(sigPair.x),
-            cell = sum(sigPair.y)) %>%
+  summarize(Main = sum(sigPair.x),
+            Cell = sum(sigPair.y)) %>%
   gather(model, nCpG, 2:3) %>%
   filter(nCpG > 0) %>%
-  mutate(model = factor(model, levels = c("main", "cell")),
-         CpGs = ifelse(nCpG > 20, "20+", 
+  mutate(model = factor(model, levels = c("Main", "Cell")),
+         CpGs = ifelse(nCpG > 20, "21+", 
                        ifelse(nCpG > 10, "11-20", 
                               ifelse(nCpG > 5, "6-10", nCpG))),
-         CpGs = factor(CpGs, levels = c(1:5, "6-10", "11-20", "20+"))) %>%
+         CpGs = factor(CpGs, levels = c(1:5, "6-10", "11-20", "21+"))) %>%
   group_by(model, CpGs) %>%
   summarize(n = n()) %>%
   group_by(model) %>%
@@ -1028,7 +1031,7 @@ TC_plot2 <- mergeTB %>%
   ggplot(aes(x = CpGs, y = p, fill = model)) +  
   geom_bar(position = "dodge", stat = "identity") +
   scale_y_continuous("Percentage TCs")  +
-  scale_fill_discrete(name = "Model", labels = c("Main", "Cell")) +
+  scale_fill_manual(name = "Model", values = c("#E69F00", "#999999")) +
   ggtitle("CpGs associated with each TC") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
@@ -1038,34 +1041,32 @@ plot_grid(CpG_plot2, TC_plot2, labels = "AUTO", ncol = 2)
 dev.off()
 
 
-png("paper/CompModelsP_values.png", width = 2500, height = 2500, res = 300)
+png("paper/CompModelsP_values.png", width = 1500, height = 1200, res = 300)
 ggplot(mergeTB, aes(x = -log10(p.value.y), y = -log10(p.value.x), col = sigType)) +
   geom_point() +
   scale_x_continuous(name = "Cell adjusted") + 
   scale_y_continuous("Main model") + 
   ggtitle("-log10 p-values comparative") +
   theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
-  scale_color_discrete(name = "")
+  geom_abline(slope = 1, linetype = "dashed") +
+  scale_color_manual(name = "", values = c("#999999", "#0072B2", "#E69F00"))
 dev.off()
 
 ## Distance distribution
-png("paper/dist_distr_main_eQTMs.png", width = 2500, height = 1500, res = 300)
+png("paper/dist_distr_main_eQTMs.png", width = 1700, height = 800, res = 300)
 mergeTB %>%
   filter(sigPair.x) %>%
   inner_join(overDF, by = c("TC", "CpG")) %>%
-  mutate(mod = ifelse(sigType == "Both", "Common", sigType)) %>%
-  ggplot(aes(x = Distance, color = mod)) +
+  ggplot(aes(x = Distance, color = sigType)) +
   geom_density() +
   theme_bw() +
-  scale_color_discrete(name = "") +
+  scale_color_manual(name = "", values = c("#0072B2", "#E69F00")) +
   scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
   scale_y_continuous(name = "") + 
   ggtitle("CpG-TC Distance") + 
   theme(plot.title = element_text(hjust = 0.5))
 dev.off()
-
-
 
 png("paper/dist_distr_cell.png", width = 2500, height = 1500, res = 300)
 rbind(mutate(sigDf, mod = "Main"), 
@@ -1074,11 +1075,12 @@ rbind(mutate(sigDf, mod = "Main"),
   ggplot(aes(x = Distance, color = mod)) +
   geom_density() +
   theme_bw() +
-  scale_color_discrete(name = "Model") +
+  scale_color_manual(name = "Model", labels = c("Main", "Cell"), 
+                    values = c("#E69F00", "#0072B2")) +
   scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
   scale_y_continuous(name = "") + 
-  ggtitle("CpG-TC Distance (significant pairs)") + 
+  ggtitle("CpG-TC Distance") + 
   theme(plot.title = element_text(hjust = 0.5))
 dev.off()
 
@@ -1095,27 +1097,30 @@ mergeTB %>%
 #   mutate(Diff.pval = pnorm(abs(FC.x - FC.y)/sqrt(SD.x**2 + SD.y**2), lower.tail = FALSE), 
 #          isDiff = ifelse(Diff.pval < 0.05, "Different", "Equal"))
 ## Compare estimates
-top <- filter(mergeTB, sigType == "Both") %>%
+top <- filter(mergeTB, sigType == "Common") %>%
   ggplot(aes(x = FC.y/10, y = FC.x/10)) +
-  geom_point(color = "black") +
+  geom_abline(slope = 1, linetype = "dashed") +
+  geom_point(color = "#0072B2") +
   scale_x_continuous(name = "Cell adjusted") + 
   scale_y_continuous("Main model") + 
-  ggtitle("Estimates comparative") +
+  ggtitle("Common") +
   theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
-  scale_color_discrete(name = "")
+  scale_color_discrete(name = "") +
+  geom_smooth(method = "lm")
 
-bottom <- filter(mergeTB, sigType != "Both") %>%
+bottom <- filter(mergeTB, sigType != "Common") %>%
   ggplot(aes(x = FC.y/10, y = FC.x/10, col = sigType)) +
   geom_point() +
+  geom_abline(slope = 1, linetype = "dashed") +
   scale_x_continuous(name = "Cell adjusted") + 
   scale_y_continuous("Main model") + 
  # ggtitle("Estimates comparative") +
   theme_bw() + 
   theme(plot.title = element_text(hjust = 0.5),
         legend.position = "none") +
-  scale_color_discrete(name = "") +
+  scale_color_manual(name = "", values = c("#999999", "#E69F00")) +
   facet_wrap(. ~ sigType) +
-  geom_smooth(method = "lm")
+  geom_smooth(method = "lm") 
 
 png("paper/CompModelsEstimates.png", width = 2500, height = 2500, res = 300)
 plot_grid(top, bottom, nrow = 2)
@@ -1137,6 +1142,67 @@ methyAnnot %>%
   dplyr::select(GeneRel, Type) %>%
   table()
 
+chromStates <- c("TssA", "TssAFlnk", "TxFlnk", "TxWk", "Tx", "EnhG", "Enh",
+                 "ZNF.Rpts", "Het", "TssBiv", "BivFlnk", "EnhBiv", "ReprPC",
+                 "ReprPCWk", "Quies")
+
+getOR <- function(cols, df){
+  t <- data.matrix(df[, cols])
+  or <- t[1, 1]/(t[1, 2])/(t[2, 1])*t[2, 2]
+  p.val <- chisq.test(t)$p.value
+  ORl <- log(or)
+  SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2])
+  c(OR = or, p.val = p.val, ORm = exp(ORl - 1.96*SEl), 
+    ORM = exp(ORl + 1.96*SEl))
+}
+
+g <- function(x, gpos, cols = c("in", "ou")){
+  sapply(gpos, function(y) getOR(paste0(y, cols), df = x))
+}
+
+sum2 <- function(x) sum(!x)
+chrom_model <- as_tibble(methyAnnot) %>%
+  filter(CpG %in% c(mainCpGs, comCpGs)) %>%
+  mutate(Type = ifelse(CpG %in% mainCpGs, "Main", "Common")) %>%
+  select(Type, eval(chromStates)) %>%
+  group_by(Type) %>%
+  summarize_at(chromStates, list(sum = sum, sum2 = sum2)) %>%
+  arrange(desc(Type)) %>%
+  g(chromStates, cols = c("_sum", "_sum2")) %>%
+  as_tibble() %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+  gather("Region", "Value", 1:15) %>%
+  spread(par, Value) %>%
+  mutate(Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
+                               ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
+                                      ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
+                                             ifelse(Region %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
+                                                    ifelse(Region %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Region)
+                                             )
+                                      )
+                               )
+  ), 
+  levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
+  )
+  ) %>%
+  ggplot(aes(x = Region, y = OR)) + 
+  geom_bar(stat = "identity", position=position_dodge(), 
+           fill = "#E69F00") + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "ROADMAP chromatin states") +
+  facet_wrap(~ Group, scales = "free_x") +
+  theme_bw() +
+  ggtitle("Enrichment main vs common eQTMs") + 
+  theme(plot.title = element_text(hjust = 0.5))
+png("paper/enrich_chromStates_model.png", width = 2500, height = 1500, res = 300)
+chrom_model
+dev.off()
+
+
+
 methyAnnot %>% 
   filter(CpG %in% c(mainCpGs, comCpGs)) %>%
   mutate(Type = factor(ifelse(CpG %in% mainCpGs, "Main", "Common"))) %>%
@@ -1144,6 +1210,17 @@ methyAnnot %>%
      family = "binomial") %>%
   summary()
 
+cot <- methyAnnot %>% 
+  filter(CpG %in% c(mainCpGs, comCpGs)) %>%
+  mutate(GeneRel = ifelse(UCSC_RefGene_Name == "", "Intergenic", "Genic"),
+         Type = ifelse(CpG %in% mainCpGs, "Main", "Common")) 
+
+methyAnnot %>% 
+  filter(CpG %in% c(mainCpGs, comCpGs)) %>%
+  mutate(GeneRel = ifelse(UCSC_RefGene_Name == "", "Intergenic", "Genic"),
+         Type = ifelse(CpG %in% mainCpGs, "Main", "Common")) %>%
+  dplyr::select(Enh, Type) %>%
+  table()
 
 
 mergeTB_Annot <- mergeTB %>%
@@ -1216,8 +1293,6 @@ data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, comCpGs), "Fstat"]
            Type = rep(c("Main", "Common"), c(length(adjCpGs), length(comCpGs)))) %>%
   lm(formula = log10(Fstat) ~ Type, data = .) %>%
   summary()
-  
-
 # Call:
 #   lm(formula = log10(Fstat) ~ Type, data = .)
 # 
@@ -1243,19 +1318,28 @@ data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, comCpGs), "Fstat"]
   ggplot(aes(y = log10(Fstat), x = Type, fill = Type)) + 
   geom_boxplot() +
   theme_bw() +
-  scale_x_discrete(name = "")
+  scale_x_discrete(name = "") +
+  scale_fill_manual(name = "", values = c("#0072B2", "#E69F00")) +
+  ggtitle("Methylation cell-type specificity") + 
+  theme(plot.title = element_text(hjust = 0.5))
 dev.off()
 
 
 ## Compare TCs with Blueprint ####
 bluep <- readRDS("data/lognormfpkm_allgenes.RDS")
-bluep_types <- read.delim("data/blueprint_ids.txt")
-bluep_donors <- read.delim("data/Blueprint_donors.txt")
-## Select blood cell types
-cellTypes <- as.character(unique(subset(bluep_types, Disease == "None" & Tissue == "venous blood" &
-                      !Cell.type %in% c("adult endothelial progenitor cell", "osteoclast"))$Name))
+bluepMap <- read.csv("data/blueprint_sampleID_mapping.csv", as.is = TRUE)
 
-bluep_blood <- bluep[, colnames(bluep) %in% cellTypes]
+## Select cell types from venous blood and remove endothelial cells
+cellMap <- subset(bluepMap, TISSUE_TYPE == "Venous blood" & GROUP != "ENDO")
+comIDs <- intersect(cellMap$RUN_ID, colnames(bluep))
+bluep_mat <- data.matrix(bluep)[, comIDs]
+rownames(bluep_mat) <- bluep$sym
+rownames(cellMap) <- cellMap$RUN_ID
+modMat <- model.matrix(~ GROUP, cellMap[comIDs, ])
+
+## Run linear model of genes vs cell type
+fit <- lmFit(bluep_mat, modMat)
+fit <- eBayes(fit)
 
 ## Select genes
 mainTCs <- setdiff(adjList$TC, cellList$TC)
@@ -1266,18 +1350,34 @@ comTCs <- intersect(adjList$TC, cellList$TC)
 comGenes <- filter(expAnnot, probeset_id %in% comTCs)$GeneSymbol_Affy
 comGenes <- unlist(strsplit(comGenes, ";"))
 
-## Remove genes regulated by different TCs in both models
+## Remove genes regulated by different CpGs in both models
 mainGenes.f <- setdiff(mainGenes, comGenes)
 comGenes.f <- setdiff(comGenes, mainGenes)
 
-bluep_s <- bluep %>%
-  as_tibble() %>%
-  spread(celltype, log2fpkm)
 
-bluep_mat <- rbind(filter(bluep_s, gene %in% mainGenes.f) %>% mutate(mod = "main"),
-                   filter(bluep_s, gene %in% comGenes.f) %>% mutate(mod = "common"))
-bluep_mat$v <- matrixStats::rowVars(data.matrix(bluep_mat[, -c(1, ncol(bluep_mat))]))
-wilcox.test(log(v) ~ factor(mod), bluep_mat, conf.int = TRUE)
+### Make results table
+bluep_res <- topTable(fit, n = Inf) %>% 
+  mutate(gene = rownames(.),
+         cat = ifelse(gene %in% mainGenes.f, "Main", 
+                      ifelse(gene %in% comGenes.f, "Common", "None"))) %>%
+  filter(cat != "None")
+
+summary(lm(formula = log10(F) ~ cat, data = bluep_res))
+  
+png("paper/CompModelsGenesCellSpecific.png", width = 1500, height = 1000, res = 300)
+bluep_res %>%
+  ggplot(aes(y = log10(F), x = cat, fill = cat)) + 
+  geom_boxplot() +
+  theme_bw() +
+  scale_x_discrete(name = "") +
+  scale_fill_manual(name = "", values = c("#0072B2", "#E69F00")) +
+  ggtitle("Gene expression cell-type specificity") + 
+  theme(plot.title = element_text(hjust = 0.5))
+dev.off()
+
+
+
+
 bluep_mat %>% group_by(mod) %>% summarize(m = median(log(v)))
 ## Los datos tienen muchos valores pequeños dp del log. Esto tira la media 
 ## muy para abajo en los genes especificos del main

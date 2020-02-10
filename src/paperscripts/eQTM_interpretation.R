@@ -476,6 +476,44 @@ combMethLevs %>%
   theme_bw() 
 dev.off()
 
+levs_all <- combMethLevs %>%
+  filter(Type == "Significant") %>%
+  spread(par, Value) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
+  geom_bar(stat = "identity", position=position_dodge()) + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "Methylation Levels", limits = cats) +
+  scale_fill_manual(values = c("#F8766D")) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+## Positive vs negative
+levs_pos <- methMethLevels %>%
+  filter(Direction %in% c("Positive", "Inverse")) %>%
+  group_by(Direction) %>%
+  select(-Type0) %>%
+  arrange(desc(Direction)) %>%
+  g2(cats) %>%
+  as_tibble() %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+  gather("Region", "Value", 1:3) %>% 
+  spread(par, Value) %>%
+  ggplot(aes(x = Region, y = OR)) + 
+  geom_bar(stat = "identity", position=position_dodge(), 
+           fill = "#009E73") + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "Methylation Levels", limits = cats) +
+  theme_bw() +
+  ggtitle("Positive vs Inverse CpGs") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+
 ## Multi vs mono in medium
 methMethLevels %>%
   filter(Combined != "Non-significant") %>%
@@ -585,6 +623,66 @@ down <- as_tibble(methyAnnot) %>%
 plot_grid(top, down, nrow = 2)
 dev.off()
 
+as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, Relation_to_Island, median) %>%
+  right_join(CpGsSum, by = "CpG") %>%
+  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM")) %>%
+  group_by(Significant, Relation_to_Island) %>%
+  summarize(m = median(median))
+
+
+isl_all <- combIsland %>%
+  filter(Type == "Significant") %>%
+  spread(par, Value) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
+  geom_bar(stat = "identity", position=position_dodge()) + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "CpG island", limits = islandStates) +
+  scale_fill_manual(values = c("#F8766D")) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+isl_all_meth <- as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, Relation_to_Island, median) %>%
+  right_join(CpGsSum, by = "CpG") %>%
+  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM")) %>%
+  ggplot(aes(x = Relation_to_Island, y = median, fill = Significant)) +
+  geom_boxplot() +
+  scale_x_discrete(name = "CpG island", limits = islandStates) +
+  scale_y_continuous(name = "Median methylation") +
+  scale_fill_discrete(name = "") +
+  theme_bw()
+
+
+
+## Positive vs negative
+isl_pos <- methIsland %>%
+  filter(Direction %in% c("Positive", "Inverse")) %>%
+  group_by(Direction) %>%
+  select(-Type0) %>%
+  arrange(desc(Direction)) %>%
+  g2(islandStates) %>%
+  as_tibble() %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+  gather("Region", "Value", 1:6) %>% 
+  spread(par, Value) %>%
+  ggplot(aes(x = Region, y = OR)) + 
+  geom_bar(stat = "identity", position=position_dodge(), 
+           fill = "#009E73") + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "CpG island", limits = islandStates) +
+  theme_bw() +
+  ggtitle("Positive vs Inverse CpGs") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
 
 
 ## Chromatin states ####
@@ -689,6 +787,109 @@ png("paper/medianMethvsChromState.png", width = 3000, height = 2000, res = 300)
   theme_bw()
 dev.off()
 
+
+chrom_all <- combChromSt %>%
+  filter(Type == "Significant") %>%
+  spread(par, Value) %>%
+  mutate(Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
+                               ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
+                                      ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
+                                             ifelse(Region %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
+                                                    ifelse(Region %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Region)
+                                             )
+                                      )
+                               )
+         ), 
+         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
+         )
+  ) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
+  geom_bar(stat = "identity", position=position_dodge()) + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "ROADMAP chromatin states") +
+  scale_fill_manual(values = c("#F8766D")) +
+  facet_wrap(~ Group, scales = "free_x") +
+  theme_bw()  +
+  theme(legend.position = "none")
+
+
+chrom_all_meth <-   as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, eval(chromStates), median) %>%
+  right_join(CpGsSum, by = "CpG") %>%
+  gather(Region, Val, 2:16) %>%
+  filter(Val == TRUE) %>%
+  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM"),
+         Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
+                               ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
+                                      ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
+                                             ifelse(Region %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
+                                                    ifelse(Region %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Region)
+                                             )
+                                      )
+                               )
+         ), 
+         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
+         )
+  ) %>%
+  ggplot(aes(x = Region, y = median, fill = Significant)) +
+  geom_boxplot() +
+  facet_wrap(~ Group, scales = "free_x") +
+  scale_x_discrete(name = "ROADMAP chromatin states") +
+  scale_y_continuous(name = "Median methylation") +
+  scale_fill_discrete(name = "") +
+  theme_bw()
+
+## Positive vs negative
+chrom_pos <- methChromSt %>%
+  filter(Direction %in% c("Positive", "Inverse")) %>%
+  group_by(Direction) %>%
+  arrange(desc(Direction)) %>%
+  select(ends_with("sum"), ends_with("sum2")) %>%
+  g(chromStates, cols = c("_sum", "_sum2")) %>%
+  as_tibble() %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+  gather("Region", "Value", 1:15) %>%
+  spread(par, Value) %>%
+  mutate(Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
+                               ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
+                                      ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
+                                             ifelse(Region %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
+                                                    ifelse(Region %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Region)
+                                             )
+                                      )
+                               )
+         ), 
+         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
+         )
+  ) %>%
+  ggplot(aes(x = Region, y = OR)) + 
+  geom_bar(stat = "identity", position=position_dodge(), 
+           fill = "#009E73") + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "ROADMAP chromatin states") +
+  facet_wrap(~ Group, scales = "free_x") +
+  theme_bw() +
+  ggtitle("Positive vs Inverse CpGs") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+top <- plot_grid(levs_all, isl_all, isl_all_meth, labels = LETTERS[1:3], nrow = 1)
+bot <- plot_grid(chrom_all, chrom_all_meth, labels = LETTERS[4:5], nrow = 1)
+png("paper/enrich_all.png", width = 5000, height = 3000, res = 300)
+plot_grid(top, bot, nrow = 2)
+dev.off()
+
+png("paper/enrich_positive.png", width = 3000, height = 2000, res = 300)
+plot_grid(plot_grid(levs_pos, isl_pos, labels = LETTERS[1:2],  ncol = 1), 
+          chrom_pos, labels = c("", "C"), nrow = 1)
+dev.off()
 
 
 ### Test variables modifying probability of being an eQTM ####
@@ -880,6 +1081,52 @@ combAge %>%
   scale_fill_manual(name = "CpG Type", values = c("#999999", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
   theme_bw() 
 dev.off()
+
+age_all <- allAge %>%
+  spread(par, Value) %>%
+  ggplot(aes(x = Region, y = OR)) + 
+  geom_bar(stat = "identity", position=position_dodge(),
+           fill = "#F8766D") + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "Methylation change during chilhood", limits = ageG) +
+  theme_bw() +
+  ggtitle("eQTM vs non-eQTM CpGs") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+## Positive vs negative
+age_pos <- ageSum %>%
+  filter(Direction %in% c("Positive", "Inverse")) %>%
+  group_by(Direction) %>%
+  select(-Type0) %>%
+  arrange(desc(Direction)) %>%
+  g2(ageG) %>%
+  as_tibble() %>%
+  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+  gather("Region", "Value", 1:3) %>% 
+  spread(par, Value) %>%
+  ggplot(aes(x = Region, y = OR)) + 
+  geom_bar(stat = "identity", position=position_dodge(), 
+           fill = "#009E73") + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "Methylation change during chilhood", limits = ageG) +
+  theme_bw() +
+  ggtitle("Positive vs Inverse CpGs") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("paper/CpGEnrichAge_new.png", width = 3000, height = 1500, res = 300)
+plot_grid(age_all, age_pos, nrow = 1, labels = "AUTO")
+dev.off()
+
+
+
+
 
 ## Overlap with literature ####
 #### EWAS Catalogue ####
