@@ -197,7 +197,14 @@ meQTL_p <- ORs %>%
   theme_bw() +
   theme(legend.position = "none")
 
-         
+x2 <- meQTLTab2 %>% 
+  mutate(cat = ifelse(nCat == 0, "noeQTM", "eQTM")) %>%
+  group_by(cat) %>%
+  summarize(mQTLin = sum(mQTLin), mQTLOut = sum(mQTLOut)) %>%
+  data.matrix()
+x2 <- x2[, -1]
+x2[1]/x2[2]/x2[3]*x2[4] 
+
          
 comMQTLs.f %>%
   select(SNP, gene) %>%
@@ -328,7 +335,7 @@ mergedDf <- rbind(comCisQTL, comTransQTL) %>%
   inner_join(sigDf, by = "CpG") %>%
   inner_join(eQTL, by = c("snps", "TC")) %>%
   dplyr::select(-sigPair) %>%
-  filter(sign(mergedDf$beta.x)*sign(mergedDf$FC) == sign(mergedDf$beta.y))
+  filter(sign(beta.x)*sign(FC) == sign(beta.y))
 
 length(unique(paste(mergedDf$CpG, mergedDf$TC)))
 length(unique(paste(mergedDf$CpG, mergedDf$TC)))/nrow(sigDf)

@@ -117,196 +117,6 @@ sigDf %>%
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
 # 1.000   1.000   1.000   1.812   2.000  26.000
 
-## Distribution pairs per chromosomes ####
-png("paper/eQTMs_Chr_distr.png", width = 2000, height = 1500, res = 300)
-sigDf %>% 
-  mutate(chr = substring(TC, 3, 4),
-         chr = gsub("^0", "", chr)) %>%
-  group_by(chr) %>%
-  summarize(n = n()) %>%
-  mutate(chr = factor(chr, levels = c(1:22, "X"))) %>%
-  ggplot(aes(x = chr, y = n)) + 
-  geom_bar(stat = "identity") +
-  scale_x_discrete(name = "Chromosome") +
-  scale_y_continuous(name = "Number Pairs") +
-  theme_bw()
-dev.off()
-
-
-## Comparison distribution pairs per chromosome
-chrDisteQTM <- sigDf %>% 
-  mutate(chr = substring(TC, 3, 4),
-         chr = gsub("^0", "", chr)) %>%
-  group_by(chr) %>%
-  summarize(n = n()) %>%
-  mutate(chr = factor(chr, levels = c(1:22, "X")))
-
-chrDistAll <- overDF %>% 
-  mutate(chr = substring(TC, 3, 4),
-         chr = gsub("^0", "", chr)) %>%
-  group_by(chr) %>%
-  summarize(n = n()) %>%
-  mutate(chr = factor(chr, levels = c(1:22, "X", "Y")))
-
-chrDistComb <- inner_join(chrDisteQTM, chrDistAll, by = "chr")
-
-png("paper/chrDistr_all_eQTM.png", width = 2000, height = 1200, res = 300)
-chrDistComb %>% mutate("All Pairs" = chrDistComb$n.y/sum(chrDistComb$n.y), 
-                       "eQTMs" = chrDistComb$n.x/sum(chrDistComb$n.x)) %>% 
-  gather(set, prop, 4:5) %>% 
-  mutate(chr = factor(chr, levels = c(1:22, "X", "Y"))) %>%
-  ggplot(aes( x = chr, y = prop, fill = set)) + 
-  geom_bar(stat = "identity", position=position_dodge()) + 
-  theme_bw() +
-  scale_fill_discrete(name = "") +
-  scale_y_continuous(name = "Percentage of CpG-TC pairs") +
-  scale_x_discrete(name = "Chromosome")
-dev.off()
-chisq.test(chrDistComb$n.x, p = chrDistComb$n.y / sum(chrDistComb$n.y))
-
-chrDistComb %>% mutate(a = chrDistComb$n.y/sum(chrDistComb$n.y), 
-                       e = chrDistComb$n.x/sum(chrDistComb$n.x),
-                       da = e - a,
-                       dr = e/a) %>%
-  arrange(desc(abs(dr)))
-
-chrDistComb %>% mutate(a = chrDistComb$n.y/sum(chrDistComb$n.y), 
-                       e = chrDistComb$n.x/sum(chrDistComb$n.x),
-                       da = e - a,
-                       dr = e/a) %>%
-  arrange(abs(dr))
-
-
-
-allRanges <- modU_comp %>%
-  mutate(chr = substring(TC, 3, 4),
-         chr = gsub("^0", "", chr),
-         chr = paste0("chr", chr))  %>%
-  makeGRangesFromDataFrame(start.field = "TC_Pos",
-                           end.field = "TC_Pos")
-
-binsM <- tileGenome(seqinfo(Hsapiens), tilewidth = 10e6,      
-                     cut.last.tile.in.chrom=TRUE)
-binsM2 <- tileGenome(seqinfo(Hsapiens), tilewidth = 1e6,      
-                    cut.last.tile.in.chrom=TRUE)
-
-ov <- findOverlaps(allRanges, binsM)
-ov2 <- findOverlaps(allRanges, binsM2)
-
-modU_comp$range <- as.character(binsM)[to(ov)]
-modU_comp$range2 <- as.character(binsM2)[to(ov2)]
-
-chrDistRang <- modU_comp %>%
-  mutate(chr = substring(TC, 3, 4)) %>%
-  group_by(range) %>%
-  summarize(n = n(),
-            nsig = sum(sigPair),
-            chr = unique(chr)) %>%
-  mutate(prop = nsig/n, 
-         OR = prop/(sum(nsig)/sum(n)))
-chisq.test(chrDistRang$nsig, p = chrDistRang$n/sum(chrDistRang$n))
-
-
-chrDistRangMini <- modU_comp %>%
-  mutate(chr = substring(TC, 3, 4)) %>%
-  group_by(range2) %>%
-  summarize(n = n(),
-            nsig = sum(sigPair),
-            chr = unique(chr)) %>%
-  mutate(prop = nsig/n, 
-         OR = prop/(sum(nsig)/sum(n)))
-
-
-## Run test in regions with more than 4300 pairs
-### Remove regions that would have less than 20 eQTMs 
-chrDistRang2 <- subset(chrDistRang, n > 4300)
-
-chrDistRang2 %>%
-  mutate(chr = gsub("^0", "", chr),
-         chr = factor(chr, levels = as.character(1:22))) %>%
-  arrange(chr) %>%
-  mutate(range = factor(range, levels = as.character(range))) %>%
-  ggplot(aes(x = range, y = OR, col = chr)) +
-  geom_point() +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  theme_bw()
-
-### Simulate distribution
-cot <- modU_comp %>%
-  mutate(chr = substring(TC, 3, 4)) %>%
-  filter(range %in% chrDistRang2$range)
-ORsims <- parallel::mclapply(seq_len(1e4), function(x) {
-  cot %>%
-    mutate(vec = sample(sigPair)) %>%
-    group_by(range) %>%
-    summarize(n = n(),
-              nsig = sum(vec),
-              chr = unique(chr)) %>%
-    mutate(prop = nsig/n, 
-           OR = prop/(sum(nsig)/sum(n))) %>%
-    ungroup() %>%
-    summarize(max = max(OR), min = min(OR))
-}, mc.cores = 5)
-
-ORmat <- Reduce(rbind, ORsims)
-filter(chrDistRang2, OR > max(ORmat$max))
-# # A tibble: 16 x 6
-# range                        n  nsig chr     prop    OR
-# <chr>                    <int> <int> <chr>  <dbl> <dbl>
-# 1 chr11:80000001-90000000  10147   112 11    0.0110  2.35
-# 2 chr12:10000001-20000000  28684   523 12    0.0182  3.89
-# 3 chr16:50000001-60000000  38087   462 16    0.0121  2.59
-# 4 chr18:20000001-30000000   7316    87 18    0.0119  2.54
-# 5 chr19:20000001-30000000   9531   405 19    0.0425  9.06
-# 6 chr2:140000001-150000000  4314   110 02    0.0255  5.44
-# 7 chr2:160000001-170000000  9385   162 02    0.0173  3.68
-# 8 chr2:190000001-200000000 11553   143 02    0.0124  2.64
-# 9 chr3:110000001-120000000 18118   230 03    0.0127  2.71
-# 10 chr3:190000001-198022430 52073   570 03    0.0109  2.33
-# 11 chr3:20000001-30000000    6703   120 03    0.0179  3.82
-# 12 chr3:30000001-40000000   18828   209 03    0.0111  2.37
-# 13 chr3:70000001-80000000    6522    74 03    0.0113  2.42
-# 14 chr7:30000001-40000000   27492   490 07    0.0178  3.80
-# 15 chr7:60000001-70000000   15881   212 07    0.0133  2.85
-# 16 chr9:120000001-130000000 21632   250 09    0.0116  2.47
-
-ggplot(chrDistRang, aes(x = chr, y = OR)) + 
-  geom_boxplot() +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-theme_bw()  
-
-chrDistTC <- modU_comp %>% 
-  mutate(chr = substring(TC, 3, 4),
-         chr = gsub("^0", "", chr)) %>%
-  group_by(TC) %>%
-  mutate(sig = any(sigPair)) %>%
-  dplyr::select(chr, TC, sig) %>%
-  distinct() %>%
-  group_by(chr) %>%
-  summarize(totTC = n(),
-            sigTC = sum(sig)) %>%
-  ungroup() %>%
-  mutate(chr = factor(chr, levels = c(1:22, "X", "Y")),
-         propallTC = totTC/sum(totTC),
-         propsigTC = sigTC/sum(sigTC))
-
-png("paper/chrDistr_TCs.png", width = 2000, height = 1200, res = 300)
-chrDistTC %>%
-  gather(set, prop, 4:5) %>% 
-  mutate(chr = factor(chr, levels = c(1:22, "X", "Y"))) %>%
-  ggplot(aes(x = chr, y = prop, fill = set)) + 
-  geom_bar(stat = "identity", position=position_dodge()) + 
-  theme_bw() +
-  scale_fill_discrete(name = "") +
-  scale_y_continuous(name = "Percentage of CpG-TC pairs") +
-  scale_x_discrete(name = "Chromosome")
-dev.off()
-
-chisq.test(p = chrDistTC$totTC/sum(chrDistTC$totTC), chrDistTC$sigTC)
-chisq.test(chrDistComb$n.x, p = chrDistTC$sigTC/sum(chrDistTC$sigTC))
-chisq.test(chrDistComb$n.y, p = chrDistTC$totTC/sum(chrDistTC$totTC))
 
 
 ## Volcano plot ####
@@ -350,6 +160,19 @@ chisq.test(table(featsU_var$variability, featsU_var$sig))
 t <- table(featsU_var$variability, featsU_var$sig)
 t[1]/t[2]/t[3]*t[4]
 
+png("paper/CpGVar_eQTMs.png", width = 2000, height = 1000, res = 300)
+featsU_var %>%
+  mutate(sigVar = ifelse(sig == "random", "CpG not in eQTMs", "CpG in eQTMs")) %>%
+  ggplot(aes(x = sigVar, y = meth_range, fill = sigVar)) + 
+  geom_boxplot() +
+  theme_bw() +
+  scale_x_discrete(name = "") +
+  theme(legend.position = "none") +
+  scale_y_continuous(name = "CpG variability") +
+  scale_fill_manual(values = c("#999999", "#FFFFFF"))
+dev.off()
+
+
 
 ### TC call rate
 int_TC <- expAnnot %>%
@@ -372,7 +195,8 @@ int_TC %>%
   theme_bw() +
   scale_x_discrete(name = "") +
   theme(legend.position = "none") +
-  scale_y_continuous(name = "TC call rate")
+  scale_y_continuous(name = "TC call rate") +
+  scale_fill_manual(values = c("#999999", "#FFFFFF"))
 dev.off()
 
 summary(glm(CallRate/100 ~ sig, int_TC, family = "binomial"))
@@ -469,6 +293,22 @@ modU_comp %>%
 
 png("paper/distance_distr.png", width = 2000, height = 2000, res = 300)
 plot_grid(dist_all, dist_dir, nrow = 2, labels = c("A", "B"))
+dev.off()
+
+
+## Distance per direction + eQTM 
+png("paper/distance_distr.png", width = 2000, height = 1300, res = 300)
+modU_comp %>%
+  mutate(Direction = ifelse(!sigPair, "non-eQTM", ifelse(FC > 0, "Positive", "Inverse")),
+         Direction = factor(Direction, levels = c("Inverse", "Positive", "non-eQTM"))) %>%
+  ggplot(aes(x = Distance, color = Direction)) + geom_density() + 
+  theme_bw() + 
+  scale_color_manual(name = "", values = c("#E69F00", "#009E73", "#000000")) +
+  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
+                     labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
+  scale_y_continuous(name = "") + 
+  ggtitle("CpG-TC Distance") + 
+  theme(plot.title = element_text(hjust = 0.5))
 dev.off()
 
 
@@ -683,7 +523,7 @@ modU_comp %>%
   theme_bw() + 
   scale_color_manual(name = "", 
                      breaks = c("Inverse", "Positive"),
-                     values = c("#000000", "#009E73")) +
+                     values = c("#E69F00", "#009E73")) +
   scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
   scale_y_continuous(name = "log2 FC/0.1 Methylation") + 
@@ -1006,7 +846,7 @@ CpG_plot2 <- mergeTB %>%
   geom_bar(position = "dodge", stat = "identity") +
   scale_y_continuous("Percentage CpGs")  +
   scale_fill_manual(name = "Model", labels = c("Main", "Cell"), 
-                    values = c("#E69F00", "#999999")) +
+                    values = c("#F5793A", "#0F2080")) +
   ggtitle("TCs associated with each CpG") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
@@ -1031,7 +871,8 @@ TC_plot2 <- mergeTB %>%
   ggplot(aes(x = CpGs, y = p, fill = model)) +  
   geom_bar(position = "dodge", stat = "identity") +
   scale_y_continuous("Percentage TCs")  +
-  scale_fill_manual(name = "Model", values = c("#E69F00", "#999999")) +
+  scale_fill_manual(name = "Model",
+                    values = c("#F5793A", "#0F2080")) +
   ggtitle("CpGs associated with each TC") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))

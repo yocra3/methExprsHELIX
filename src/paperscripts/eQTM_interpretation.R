@@ -121,9 +121,10 @@ sapply(subtypes_go, function(x) sum(x$table$w0 < 0.001))
 library(GOfuncR)
 library(topGO)
 library(dplyr)
-server <- "//isg10174/data/WS_HELIX/HELIX_analyses/expr_met_SM/paper/"
+server <- "/run/user/1000/gvfs/sftp:host=isgws06.isglobal.org,port=2222,user=cruiz/home/isglobal.lan/cruiz/data/WS_HELIX/HELIX_analyses/expr_met_SM/paper/"
 
 load(paste0(server, "GOobjects.Rdata"))
+load(paste0(server, "snpGOs.Rdata"))
 
 ## Define categories for GO terms
 ## Use http://amigo.geneontology.org/amigo/dd_browse and only select GOs > 10 genes in H. Sapiens.
@@ -272,9 +273,7 @@ sumF <- function(x, topGOs){
 addImmunityInfo <- function(tab){
   get_parent_nodes(tab$GO.ID) %>%
     group_by(child_go_id) %>%
-    summarize(parent = ifelse(any(immune %in% parent_name), 
-                              "immune", 
-                              sumF(parent_name, topGOs = top_GOs)), 
+    summarize(parent = sumF(parent_name, topGOs = top_GOs), 
               immune = ifelse(any(adaptive %in% parent_name), 
                               "adaptive",
                               ifelse(any(innate %in% parent_name), 
@@ -290,6 +289,8 @@ addImmunityInfo <- function(tab){
 
 ## Select GOs with p-value < 0.001
 allMod <- addImmunityInfo(subset(allGos$table, as.numeric(w0) < 0.001))
+snpMod <- addImmunityInfo(subset(snpGos$table, as.numeric(w0) < 0.001))
+
 subtypesTabs <- lapply(subtypes_go, function(x){
   subset(addImmunityInfo(x$tab), as.numeric(w0) < 0.001)
 })
@@ -297,6 +298,9 @@ subtypesTabs <- lapply(subtypes_go, function(x){
   
 write.table(allMod[, c("GO.ID", "GO_term", "w0", "parent", "immune")], 
             file = paste0(server, "/GOsAllGenes.txt"), 
+            quote = FALSE, col.names = TRUE, sep = "\t", row.names = FALSE)
+write.table(snpMod[, c("GO.ID", "GO_term", "w0", "parent", "immune")], 
+            file = paste0(server, "/GOsGenesSNPs.txt"), 
             quote = FALSE, col.names = TRUE, sep = "\t", row.names = FALSE)
 
 lapply(names(subtypesTabs), function(x){
@@ -363,8 +367,7 @@ chisq.test(immuneTab)
 
 # CpG Enrichment ####
 rownames(methyAnnot) <- methyAnnot$Name
-methyAnnot$GeneRel <- ifelse(methyAnnot$UCSC_RefGene_Name == "", "Intergenic", "Genic")
-types <- c("Both", "Positive", "Inverse")
+types <- c("eQTM", "Positive", "Inverse")
 
 ## Define vars and function
 getOR <- function(cols, df){
@@ -383,6 +386,14 @@ g <- function(x, gpos, cols = c("in", "ou")){
 
 
 ## Methylation levels ####
+fsum <- function(x){
+  if ( is.factor(x))
+    "eQTM"
+  else {
+    sum(x)
+}
+    }
+
 methMethLevels <- as_tibble(methyAnnot) %>%
   mutate(CpG = Name) %>%
   select(CpG, median_cat) %>%
@@ -391,8 +402,12 @@ methMethLevels <- as_tibble(methyAnnot) %>%
   group_by(Direction, median_cat) %>%
   summarize(n = n()) %>%
   spread(median_cat, n) %>%
-  mutate(Type0 = ifelse(Direction == "Non-significant", "Non-significant", "Significant"), 
-         tot = sum(low, medium, high))
+  ungroup() %>%
+  rbind(filter(., Direction != "Non-significant") %>% 
+            summarize_all(fsum)) %>%
+  mutate(Direction = as.character(Direction),
+         Direction = ifelse(is.na(Direction), "eQTM", Direction),
+         tot = low + medium + high)
 
 cats <- c("low", "medium", "high")
 
@@ -412,46 +427,32 @@ g2 <- function(x, gpos){
   sapply(gpos, function(y) getOR2(y, df = x))
 }
 
-methMethLevels %>%
-  mutate(lowp = low/tot,
-         medp = medium/tot,
-         highp = high/tot) %>%
-  gather(Levels, proportion, 7:9)
+methLevs_prop_plot <- methMethLevels %>%
+  filter(Direction != "Both") %>%
+  mutate(Low = low/tot,
+         Medium = medium/tot,
+         High = high/tot) %>%
+  select(Direction, Low, Medium, High) %>%
+  gather(categories, proportion, 2:4) %>%
+  ungroup() %>%
+  mutate(Direction = as.character(Direction),
+         Direction = ifelse(Direction == "Non-significant", "non-eQTM", Direction),
+        Direction = factor(Direction,  levels = c("non-eQTM", "eQTM", "Inverse", "Positive")),
+        categories = factor(categories, levels = c("Low", "Medium", "High"))) %>%
+  ggplot(aes(x = categories, y = proportion*100, fill = Direction)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  scale_x_discrete(name = "Methylation Levels") +
+  scale_y_continuous(name = "Proportion of CpGs (%)") +
+  scale_fill_manual(name = "CpG Type", values = c("#000000", "#999999", "#E69F00", "#009E73")) +
+  theme_bw()
 
-
-methMethLevels %>% 
-  select(Direction, low, medium, high) %>%
-  gather(Levels, vals, 2:4) %>%
-  spread(Direction, vals) %>%
-  mutate(Significant = Both + Positive + Inverse) %>%
-  gather(CpGtype, vals, 2:5) %>%
-  mutate(CpGtype = factor(CpGtype, levels = c("Significant", "Non-significant", types))) %>%
-  group_by(CpGtype) %>%
-  mutate(prop = vals/sum(vals)) %>%
-  ggplot(aes(x = Levels, y = prop, fill = CpGtype)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  scale_x_discrete(name = "Methylation Levels", limits = cats) +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#000000", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
-  theme_bw() 
-
-
-allMethLevs <- methMethLevels %>%
-  group_by(Type0) %>%
-  select(-Direction) %>%
-  summarize_all(list(sum)) %>%
-  arrange(desc(Type0)) %>%
-  g2(cats) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", 1:3) %>%
-  mutate(Type = "Significant")
+png("paper/CpGFreqsMethLevels.png", width = 3000, height = 2000, res = 300)
+methLevs_prop_plot
+dev.off()
 
 typesMethLevs <- lapply(types, function(t){
-  methMethLevels %>%
-    filter(Direction %in% c(t, "Non-significant")) %>%
-    group_by(Direction) %>%
-    select(-Type0) %>%
-    summarize_all(list(sum)) %>%
+  rbind(filter(methMethLevels, Direction == t),
+        filter(methMethLevels, Direction == "Non-significant")) %>%
     g2(cats) %>%
     as_tibble() %>%
     mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
@@ -459,85 +460,24 @@ typesMethLevs <- lapply(types, function(t){
     mutate(Type = t)
 })
 combMethLevs <- Reduce(rbind, typesMethLevs)
-combMethLevs <- rbind(allMethLevs, combMethLevs)
+
+methLevsPlot <- combMethLevs %>%
+  spread(par, Value) %>%
+  mutate(Type = factor(Type, levels = c("eQTM", "Inverse", "Positive"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
+  geom_bar(stat = "identity", position=position_dodge()) + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "Methylation Levels", limits = cats, labels = tools::toTitleCase(cats)) +
+  scale_fill_manual(name = "CpG Type", values =  c("#999999", "#E69F00", "#009E73")) +
+  theme_bw() 
 
 png("paper/CpGEnrichMethLevels.png", width = 3000, height = 2000, res = 300)
-combMethLevs %>%
-  spread(par, Value) %>%
-  mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
-  ggplot(aes(x = Region, y = OR, fill = Type)) + 
-  geom_bar(stat = "identity", position=position_dodge()) + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "Methylation Levels", limits = cats) +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
-  theme_bw() 
+methLevsPlot
 dev.off()
 
-levs_all <- combMethLevs %>%
-  filter(Type == "Significant") %>%
-  spread(par, Value) %>%
-  ggplot(aes(x = Region, y = OR, fill = Type)) + 
-  geom_bar(stat = "identity", position=position_dodge()) + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "Methylation Levels", limits = cats) +
-  scale_fill_manual(values = c("#F8766D")) +
-  theme_bw() +
-  theme(legend.position = "none")
-
-## Positive vs negative
-levs_pos <- methMethLevels %>%
-  filter(Direction %in% c("Positive", "Inverse")) %>%
-  group_by(Direction) %>%
-  select(-Type0) %>%
-  arrange(desc(Direction)) %>%
-  g2(cats) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", 1:3) %>% 
-  spread(par, Value) %>%
-  ggplot(aes(x = Region, y = OR)) + 
-  geom_bar(stat = "identity", position=position_dodge(), 
-           fill = "#009E73") + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "Methylation Levels", limits = cats) +
-  theme_bw() +
-  ggtitle("Positive vs Inverse CpGs") + 
-  theme(plot.title = element_text(hjust = 0.5))
-
-
-## Multi vs mono in medium
-methMethLevels %>%
-  filter(Combined != "Non-significant") %>%
-  mutate(group = ifelse(grepl("Mono", Combined), "Mono", "Multi")) %>%
-  group_by(group) %>%
-  summarize_if(is.numeric, sum) %>%
-  getOR2(col = "medium", df = .)
-  
-
-## Negative vs positive in low
-methMethLevels %>%
-  filter(Combined != "Non-significant") %>%
-  mutate(group = ifelse(grepl("Positive", Combined), "Positive", "Other")) %>%
-  group_by(group) %>%
-  summarize_if(is.numeric, sum) %>%
-  getOR2(col = "low", df = .)
-
-## Multi positive vs other in high
-methMethLevels %>%
-  filter(Combined != "Non-significant") %>%
-  mutate(group = ifelse(Combined == "Multi_Positive", "Positive", "Other")) %>%
-  group_by(group) %>%
-  summarize_if(is.numeric, sum) %>%
-  getOR2(col = "high", df = .)
 
 ## CpG Islands ####
 methIsland <- as_tibble(methyAnnot) %>%
@@ -548,28 +488,46 @@ methIsland <- as_tibble(methyAnnot) %>%
   group_by(Direction, Relation_to_Island) %>%
   summarize(n = n()) %>%
   spread(Relation_to_Island, n) %>%
-  mutate(Type0 = ifelse(Direction == "Non-significant", "Non-significant", "Significant"), 
-      tot = sum(Island, N_Shelf, N_Shore, OpenSea, S_Shelf, S_Shore))
+  ungroup() %>%
+  rbind(filter(., Direction != "Non-significant") %>% 
+          summarize_all(fsum)) %>%
+  mutate(Direction = as.character(Direction),
+         Direction = ifelse(is.na(Direction), "eQTM", Direction),
+         tot = Island + N_Shelf + N_Shore + OpenSea + S_Shelf + S_Shore)
 
+  
 islandStates <- c("N_Shelf", "N_Shore", "Island", "S_Shore", "S_Shelf", "OpenSea")
 
-allIsland <- methIsland %>%
-  group_by(Type0) %>%
-  select(-Direction) %>%
-  summarize_all(list(sum)) %>%
-  arrange(desc(Type0)) %>%
-  g2(islandStates) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", 1:length(islandStates)) %>%
-  mutate(Type = "Significant")
+
+Island_prop_plot <- methIsland %>%
+  filter(Direction != "Both") %>%
+  mutate(N_Shelf = N_Shelf/tot,
+         N_Shore = N_Shore/tot,
+         Island = Island/tot,
+         S_Shore = S_Shore/tot,
+         S_Shelf = S_Shelf/tot,
+         OpenSea = OpenSea/tot) %>%
+  select(-tot) %>%
+  gather(categories, proportion, 2:(2+length(islandStates) - 1)) %>%
+  ungroup() %>%
+  mutate(Direction = as.character(Direction),
+         Direction = ifelse(Direction == "Non-significant", "non-eQTM", Direction),
+         Direction = factor(Direction,  levels = c("non-eQTM", "eQTM", "Inverse", "Positive")),
+         categories = factor(categories, levels = islandStates)) %>%
+  ggplot(aes(x = categories, y = proportion*100, fill = Direction)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  scale_x_discrete(name = "Methylation Levels") +
+  scale_y_continuous(name = "Proportion of CpGs (%)") +
+  scale_fill_manual(name = "CpG Type", values = c("#000000", "#999999", "#E69F00", "#009E73")) +
+  theme_bw()
+
+png("paper/CpGFreqsIsland.png", width = 3000, height = 2000, res = 300)
+Island_prop_plot
+dev.off()
 
 typesIsland <- lapply(types, function(t){
-  methIsland %>%
-    filter(Direction %in% c(t, "Non-significant")) %>%
-    group_by(Direction) %>%
-    select(-Type0) %>%
-    summarize_all(list(sum)) %>%
+    rbind(filter(methIsland, Direction == t),
+          filter(methIsland, Direction == "Non-significant")) %>%
     g2(islandStates) %>%
     as_tibble() %>%
     mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
@@ -577,112 +535,40 @@ typesIsland <- lapply(types, function(t){
     mutate(Type = t)
 })
 combIsland <- Reduce(rbind, typesIsland)
-combIsland <- rbind(allIsland, combIsland)
+
+cpgPosPlot <- combIsland %>%
+  spread(par, Value) %>%
+  mutate(Type = factor(Type, levels = c("eQTM", "Inverse", "Positive"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
+  geom_bar(stat = "identity", position=position_dodge()) + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "CpG Island position", limits = islandStates) +
+  scale_fill_manual(name = "CpG Type", values = c("#999999", "#E69F00", "#009E73")) +
+  theme_bw() 
 
 png("paper/CpGEnrichIsland.png", width = 3000, height = 2000, res = 300)
-combIsland %>%
-  spread(par, Value) %>%
-  mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
-  ggplot(aes(x = Region, y = OR, fill = Type)) + 
-  geom_bar(stat = "identity", position=position_dodge()) + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "Methylation Levels", limits = islandStates) +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
-  theme_bw() 
+cpgPosPlot
 dev.off()
 
-## CpG Island vs methylation levels
-png("paper/medianMethvsIsland.png", width = 3000, height = 2000, res = 300)
-top <- as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  select(CpG, Relation_to_Island, median) %>%
-  right_join(CpGsSum, by = "CpG") %>%
-  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM")) %>%
-  ggplot(aes(x = Relation_to_Island, y = median, fill = Significant)) +
-  geom_boxplot() +
-  scale_x_discrete(name = "CpG island", limits = islandStates) +
-  scale_y_continuous(name = "Median methylation") +
-  scale_fill_discrete(name = "") +
-  theme_bw()
-
-down <- as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  select(CpG, Relation_to_Island, median) %>%
-  right_join(CpGsSum, by = "CpG") %>%
-  mutate(Combined = factor(Combined, levels = c("Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both", "Non-significant"))) %>%
-  ggplot(aes(x = Relation_to_Island, y = median, fill = Combined)) +
-  geom_boxplot() +
-  scale_x_discrete(name = "CpG island", limits = islandStates) +
-  scale_fill_manual(name = "CpG Type", values = c("#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73", "#555555")) +
-  scale_y_continuous(name = "Median methylation") +
-  theme_bw()
-
-plot_grid(top, down, nrow = 2)
-dev.off()
-
-as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  select(CpG, Relation_to_Island, median) %>%
-  right_join(CpGsSum, by = "CpG") %>%
-  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM")) %>%
-  group_by(Significant, Relation_to_Island) %>%
-  summarize(m = median(median))
-
-
-isl_all <- combIsland %>%
-  filter(Type == "Significant") %>%
-  spread(par, Value) %>%
-  ggplot(aes(x = Region, y = OR, fill = Type)) + 
-  geom_bar(stat = "identity", position=position_dodge()) + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "CpG island", limits = islandStates) +
-  scale_fill_manual(values = c("#F8766D")) +
-  theme_bw() +
-  theme(legend.position = "none")
-
+# CpG Islands vs Methylation levels
 isl_all_meth <- as_tibble(methyAnnot) %>%
   mutate(CpG = Name) %>%
   select(CpG, Relation_to_Island, median) %>%
   right_join(CpGsSum, by = "CpG") %>%
   mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM")) %>%
   ggplot(aes(x = Relation_to_Island, y = median, fill = Significant)) +
-  geom_boxplot() +
+  geom_violin() +
   scale_x_discrete(name = "CpG island", limits = islandStates) +
   scale_y_continuous(name = "Median methylation") +
-  scale_fill_discrete(name = "") +
+  scale_fill_manual(name = "", values = c("#999999", "#FFFFFF")) +
   theme_bw()
 
-
-
-## Positive vs negative
-isl_pos <- methIsland %>%
-  filter(Direction %in% c("Positive", "Inverse")) %>%
-  group_by(Direction) %>%
-  select(-Type0) %>%
-  arrange(desc(Direction)) %>%
-  g2(islandStates) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", 1:6) %>% 
-  spread(par, Value) %>%
-  ggplot(aes(x = Region, y = OR)) + 
-  geom_bar(stat = "identity", position=position_dodge(), 
-           fill = "#009E73") + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "CpG island", limits = islandStates) +
-  theme_bw() +
-  ggtitle("Positive vs Inverse CpGs") + 
-  theme(plot.title = element_text(hjust = 0.5))
-
+png("paper/Islands_methLevs_violin.png", width = 3000, height = 1000, res = 300)
+isl_all_meth
+dev.off()
 
 
 ## Chromatin states ####
@@ -691,33 +577,59 @@ chromStates <- c("TssA", "TssAFlnk", "TxFlnk", "TxWk", "Tx", "EnhG", "Enh",
                  "ReprPCWk", "Quies")
 sum2 <- function(x) sum(!x)
 
+
+methChromStIni <- as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, eval(chromStates)) %>%
+  right_join(CpGsSum, by = "CpG") %>%
+  mutate(Direction = ifelse(Type == "Non-significant", "non-eQTM", "eQTM")) %>%
+  group_by(Direction) %>%
+  summarize_at(chromStates, list(sum = sum, sum2 = sum2, prop = mean))
+
 methChromSt <- as_tibble(methyAnnot) %>%
   mutate(CpG = Name) %>%
   select(CpG, eval(chromStates)) %>%
   right_join(CpGsSum, by = "CpG") %>%
   mutate(Direction = factor(Direction, levels = c("Inverse", "Positive", "Both", "Non-significant"))) %>%
   group_by(Direction) %>%
-  summarize_at(chromStates, list(sum = sum, sum2 = sum2)) %>%
-  mutate(Type0 = ifelse(Direction == "Non-significant", "Non-significant", "Significant"))
+  summarize_at(chromStates, list(sum = sum, sum2 = sum2, prop = mean))  %>%
+  filter(Direction != "Non-significant") %>%
+  rbind(methChromStIni)
 
 
-allChromSt <- methChromSt %>%
-  group_by(Type0) %>%
-  select(ends_with("sum"), ends_with("sum2")) %>%
-  summarize_all(list(sum)) %>%
-  arrange(desc(Type0)) %>%
-  g(chromStates, cols = c("_sum", "_sum2")) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", 1:15) %>%
-  mutate(Type = "Significant")
+chromSt_prop_plot <- methChromSt %>%
+  filter(Direction != "Both") %>%
+  select(Direction, ends_with("prop")) %>%
+  gather(categories, proportion, 2:(2+length(chromStates) - 1)) %>%
+  ungroup() %>%
+  mutate(Direction = factor(Direction,  levels = c("non-eQTM", "eQTM", "Inverse", "Positive")),
+         categories = gsub("_prop", "", categories),
+         Group = factor(ifelse(categories %in% c("TssA", "TssAFlnk"), "TssProxProm",
+                               ifelse(categories %in% c("Tx", "TxWk"), "ActTrans", 
+                                      ifelse(categories %in% c("Enh", "EnhG"), "Enhancer", 
+                                             ifelse(categories %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
+                                                    ifelse(categories %in% c("ReprPC", "ReprPCWk"), "ReprPoly", categories)
+                                             )
+                                      )
+                               )
+         ), 
+         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
+         ),
+         categories = factor(categories, levels = chromStates)) %>%
+  ggplot(aes(x = categories, y = proportion*100, fill = Direction)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  scale_x_discrete(name = "ROADMAP chromatin states") +
+  facet_wrap(~ Group, scales = "free_x") +  
+  scale_y_continuous(name = "Proportion of CpGs (%)") +
+  scale_fill_manual(name = "CpG Type", values = c("#000000", "#999999", "#E69F00", "#009E73")) +
+  theme_bw()
+
+
 
 typesChromSt <- lapply(types, function(t){
-  methChromSt %>%
-    filter(Direction %in% c(t, "Non-significant")) %>%
-    group_by(Direction) %>%
+  rbind(filter(methChromSt, Direction == t),
+        filter(methChromSt, Direction == "non-eQTM")) %>%
     select(ends_with("sum"), ends_with("sum2")) %>%
-    summarize_all(list(sum)) %>%
     g(chromStates, cols = c("_sum", "_sum2")) %>%
     as_tibble() %>%
     mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
@@ -725,13 +637,12 @@ typesChromSt <- lapply(types, function(t){
     mutate(Type = t)
 })
 combChromSt <- Reduce(rbind, typesChromSt)
-combChromSt <- rbind(allChromSt, combChromSt)
 
 png("paper/CpGEnrichChromStates.png", width = 3000, height = 2000, res = 300)
-combChromSt %>%
+chromStatesPlot <- combChromSt %>%
   spread(par, Value) %>%
   mutate(Type = factor(Type, 
-                       levels = c("Significant", "Inverse", "Positive", "Both")),
+                       levels = c("eQTM", "Inverse", "Positive")),
          Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
                                ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
                                       ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
@@ -751,71 +662,14 @@ combChromSt %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "ROADMAP chromatin states") +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
+  scale_fill_manual(name = "CpG Type", values = c("#999999", "#E69F00", "#009E73")) +
   facet_wrap(~ Group, scales = "free_x") +
   theme_bw() 
+chromStatesPlot
 dev.off()
 
 
 ## Chromatin states vs methylation levels
-png("paper/medianMethvsChromState.png", width = 3000, height = 2000, res = 300)
-  as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  select(CpG, eval(chromStates), median) %>%
-  right_join(CpGsSum, by = "CpG") %>%
-  gather(Region, Val, 2:16) %>%
-  filter(Val == TRUE) %>%
-  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM"),
-         Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
-                               ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
-                                      ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
-                                             ifelse(Region %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
-                                                    ifelse(Region %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Region)
-                                             )
-                                      )
-                               )
-         ), 
-         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
-         )
-  ) %>%
-  ggplot(aes(x = Region, y = median, fill = Significant)) +
-  geom_boxplot() +
-  facet_wrap(~ Group, scales = "free_x") +
-  scale_x_discrete(name = "ROADMAP chromatin states") +
-  scale_y_continuous(name = "Median methylation") +
-  scale_fill_discrete(name = "") +
-  theme_bw()
-dev.off()
-
-
-chrom_all <- combChromSt %>%
-  filter(Type == "Significant") %>%
-  spread(par, Value) %>%
-  mutate(Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
-                               ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
-                                      ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
-                                             ifelse(Region %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
-                                                    ifelse(Region %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Region)
-                                             )
-                                      )
-                               )
-         ), 
-         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
-         )
-  ) %>%
-  ggplot(aes(x = Region, y = OR, fill = Type)) + 
-  geom_bar(stat = "identity", position=position_dodge()) + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "ROADMAP chromatin states") +
-  scale_fill_manual(values = c("#F8766D")) +
-  facet_wrap(~ Group, scales = "free_x") +
-  theme_bw()  +
-  theme(legend.position = "none")
-
-
 chrom_all_meth <-   as_tibble(methyAnnot) %>%
   mutate(CpG = Name) %>%
   select(CpG, eval(chromStates), median) %>%
@@ -836,133 +690,38 @@ chrom_all_meth <-   as_tibble(methyAnnot) %>%
          )
   ) %>%
   ggplot(aes(x = Region, y = median, fill = Significant)) +
-  geom_boxplot() +
+  geom_violin() +
   facet_wrap(~ Group, scales = "free_x") +
   scale_x_discrete(name = "ROADMAP chromatin states") +
   scale_y_continuous(name = "Median methylation") +
-  scale_fill_discrete(name = "") +
+  scale_fill_manual(name = "", values = c("#999999", "#FFFFFF")) +
   theme_bw()
-
-## Positive vs negative
-chrom_pos <- methChromSt %>%
-  filter(Direction %in% c("Positive", "Inverse")) %>%
-  group_by(Direction) %>%
-  arrange(desc(Direction)) %>%
-  select(ends_with("sum"), ends_with("sum2")) %>%
-  g(chromStates, cols = c("_sum", "_sum2")) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", 1:15) %>%
-  spread(par, Value) %>%
-  mutate(Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
-                               ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
-                                      ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
-                                             ifelse(Region %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
-                                                    ifelse(Region %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Region)
-                                             )
-                                      )
-                               )
-         ), 
-         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
-         )
-  ) %>%
-  ggplot(aes(x = Region, y = OR)) + 
-  geom_bar(stat = "identity", position=position_dodge(), 
-           fill = "#009E73") + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "ROADMAP chromatin states") +
-  facet_wrap(~ Group, scales = "free_x") +
-  theme_bw() +
-  ggtitle("Positive vs Inverse CpGs") + 
-  theme(plot.title = element_text(hjust = 0.5))
-
-
-top <- plot_grid(levs_all, isl_all, isl_all_meth, labels = LETTERS[1:3], nrow = 1)
-bot <- plot_grid(chrom_all, chrom_all_meth, labels = LETTERS[4:5], nrow = 1)
-png("paper/enrich_all.png", width = 5000, height = 3000, res = 300)
-plot_grid(top, bot, nrow = 2)
+png("paper/medianMethvsChromState.png", width = 3000, height = 3000, res = 300)
+chrom_all_meth
 dev.off()
 
-png("paper/enrich_positive.png", width = 3000, height = 2000, res = 300)
-plot_grid(plot_grid(levs_pos, isl_pos, labels = LETTERS[1:2],  ncol = 1), 
-          chrom_pos, labels = c("", "C"), nrow = 1)
+### Combined plot
+png("paper/enrich_combined.png", width = 5000, height = 3000, res = 300)
+plot_grid(
+  plot_grid(cpgPosPlot, methLevsPlot, labels = c("A", "C"), nrow = 1),
+  chromStatesPlot, 
+  labels = c("", "B"), ncol = 1, rel_heights = c(1, 2)
+)
+dev.off()
+
+png("paper/featuresProp_combined.png", width = 5000, height = 3000, res = 300)
+plot_grid(
+  plot_grid(Island_prop_plot, methLevs_prop_plot, labels = c("A", "C"), nrow = 1),
+  chromSt_prop_plot, 
+  labels = c("", "B"), ncol = 1, rel_heights = c(1, 2)
+)
+dev.off()
+
+png("paper/enrich_methLevs_violin.png", width = 5000, height = 3000, res = 300)
+plot_grid(isl_all_meth, chrom_all_meth, labels = LETTERS[1:2], ncol = 1, rel_heights = c(1, 2))
 dev.off()
 
 
-### Test variables modifying probability of being an eQTM ####
-as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  right_join(CpGsSum, by = "CpG") %>%
-  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM"),
-         Significant = factor(Significant, levels = c("Non-eQTM", "eQTM")),
-         median_trans = -(median-0.5)^2) %>%
-  glm(formula(paste("Significant ~ median_trans + Relation_to_Island + GeneRel +",
-                    paste(chromStates, collapse = "+"))), 
-      family = "binomial", .) %>%
-  summary()
-# Estimate Std. Error z value Pr(>|z|)
-# (Intercept)               -2.11824    0.02788 -75.971  < 2e-16 ***
-#   median_trans               8.12840    0.08689  93.549  < 2e-16 ***
-#   Relation_to_IslandN_Shelf  0.35235    0.02950  11.944  < 2e-16 ***
-#   Relation_to_IslandN_Shore  0.33235    0.02007  16.561  < 2e-16 ***
-#   Relation_to_IslandOpenSea  0.35733    0.01930  18.513  < 2e-16 ***
-#   Relation_to_IslandS_Shelf  0.31476    0.03116  10.102  < 2e-16 ***
-#   Relation_to_IslandS_Shore  0.35610    0.02126  16.746  < 2e-16 ***
-#   GeneRelIntergenic         -0.16639    0.01493 -11.148  < 2e-16 ***
-#   TssATRUE                   0.15682    0.01827   8.586  < 2e-16 ***
-#   TssAFlnkTRUE               0.45341    0.01651  27.461  < 2e-16 ***
-#   TxFlnkTRUE                 0.01230    0.02097   0.587  0.55753
-# TxWkTRUE                   0.25240    0.01429  17.663  < 2e-16 ***
-#   TxTRUE                    -0.01657    0.02075  -0.799  0.42453
-# EnhGTRUE                   0.25193    0.02256  11.169  < 2e-16 ***
-#   EnhTRUE                    0.32913    0.01399  23.528  < 2e-16 ***
-#   ZNF.RptsTRUE               0.56330    0.03724  15.128  < 2e-16 ***
-#   HetTRUE                   -0.07398    0.02513  -2.943  0.00325 **
-#   TssBivTRUE                -0.10580    0.02520  -4.199 2.68e-05 ***
-#   BivFlnkTRUE                0.32190    0.02201  14.624  < 2e-16 ***
-#   EnhBivTRUE                -0.04924    0.02015  -2.444  0.01453 *
-#   ReprPCTRUE                -0.02174    0.01627  -1.337  0.18132
-# ReprPCWkTRUE               0.18674    0.01590  11.746  < 2e-16 ***
-#   QuiesTRUE                  0.08442    0.01547   5.456 4.88e-08 ***
-  
-
-## Test variables explaining differences between CpG Types
-
-## Mono_Inverse
-
-runFullModel <- function(type) {
-  as_tibble(methyAnnot) %>%
-    mutate(CpG = Name) %>%
-    right_join(CpGsSum, by = "CpG") %>%
-    filter(Type != "Non-significant") %>%
-    mutate(SelCpG = ifelse(Combined %in% type, "Sel", "Other"),
-           SelCpG = factor(SelCpG, levels = c("Other", "Sel")),
-           median_trans = -(median-0.5)^2) %>%
-    glm(formula(paste("SelCpG ~ median_trans + Relation_to_Island + GeneRel +",
-                      paste(chromStates, collapse = "+"))), 
-        family = "binomial", .) %>%
-    summary()
-}
-filt <- function(mod){
-  mod$coefficient[mod$coefficient[, 4] < 0.05,]
-}
-runFullModel("Mono_Inverse")
-filt(runFullModel("Mono_Inverse"))
-runFullModel("Mono_Positive")
-filt(runFullModel("Mono_Positive"))
-runFullModel("Multi_Inverse")
-filt(runFullModel("Multi_Inverse"))
-runFullModel("Multi_Positive")
-filt(runFullModel("Multi_Positive"))
-runFullModel("Multi_Both")
-filt(runFullModel("Multi_Both"))
-
-
-runFullModel(c("Mono_Inverse", "Mono_Positive"))
-runFullModel(c("Multi_Positive", "Mono_Positive"))
 
 ## Blood cell types ####
 png("paper/CpGEnrichBloodTypes.png", width = 3000, height = 2000, res = 300)
@@ -1019,11 +778,15 @@ FlowSorted.Blood.450k.compTable %>%
 # 
 
 
+
+
+
+## Overlap with literature ####
 ## Age variability ####
 agedf <- read.csv2("data/DiffMethyAgeCpGs.csv", as.is = TRUE)
 agedf <- agedf %>%
   as_tibble() %>%
-  mutate(Dir = ifelse(as.numeric(beta8.avg) > as.numeric(beta0.avg), "Increasing", "Decreasing"), 
+  mutate(Dir = ifelse(as.numeric(beta8.avg) > as.numeric(beta0.avg), "Increased", "Decreased"), 
          CpG = ILMNID)
 
 ageSum <- CpGsSum %>%
@@ -1034,102 +797,66 @@ ageSum <- CpGsSum %>%
   group_by(Direction, Dir) %>%
   summarize(n = n()) %>%
   spread(Dir, n) %>%
-  mutate(Type0 = ifelse(Direction == "Non-significant", "Non-significant", "Significant"), 
-         Changed = sum(Decreasing, Increasing), 
-         tot = sum(Changed, Constant))
+  ungroup() %>%
+  rbind(filter(., Direction != "Non-significant") %>% 
+          summarize_all(fsum)) %>%
+  mutate(Direction = as.character(Direction),
+         Direction = ifelse(is.na(Direction), "eQTM", Direction),
+         Changed = Decreased + Increased,
+         tot = Changed + Constant)
 
-ageG <- c("Changed", "Decreasing", "Increasing")
+ageG <- c("Changed", "Decreased", "Increased")
 
-allAge <- ageSum %>%
-  group_by(Type0) %>%
-  dplyr::select(-c(1:2)) %>%
-  summarize_all(list(sum)) %>%
-  arrange(desc(Type0)) %>%
-  g2(ageG) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", 1:3) %>%
-  mutate(Type = "Significant")
 
-typesAge <- lapply(c("Inverse", "Positive", "Both"), function(t){
-  ageSum %>%
-    filter(Direction %in% c(t, "Non-significant")) %>%
-    group_by(Direction) %>%
-    dplyr::select(-Type0) %>%
-    summarize_all(list(sum)) %>%
-   # arrange(Combined) %>%
+typesAge <- lapply(types, function(t){
+  rbind(filter(ageSum, Direction == t),
+        filter(ageSum, Direction == "Non-significant")) %>%
     g2(ageG) %>%
     as_tibble() %>%
     mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-    gather("Region", "Value", 1:length(ageG)) %>%
+    gather("Region", "Value", 1:3) %>%
     mutate(Type = t)
 })
 combAge <- Reduce(rbind, typesAge)
-combAge <- rbind(allAge, combAge)
 
 png("paper/CpGEnrichAge.png", width = 3000, height = 2000, res = 300)
-combAge %>%
+age_var <- combAge %>%
   spread(par, Value) %>%
-  mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive", "Both"))) %>%
+  mutate(Type = factor(Type, levels = c("eQTM", "Inverse", "Positive"))) %>%
   ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "Change during chilhood", limits = ageG) +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
+  scale_x_discrete(name = "Methylation during childhood", limits = ageG) +
+  scale_fill_manual(name = "CpG Type", values = c("#999999", "#E69F00", "#009E73")) +
   theme_bw() 
+age_var
 dev.off()
 
-age_all <- allAge %>%
-  spread(par, Value) %>%
-  ggplot(aes(x = Region, y = OR)) + 
-  geom_bar(stat = "identity", position=position_dodge(),
-           fill = "#F8766D") + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "Methylation change during chilhood", limits = ageG) +
-  theme_bw() +
-  ggtitle("eQTM vs non-eQTM CpGs") + 
-  theme(plot.title = element_text(hjust = 0.5))
+tmp <- CpGsSum %>%
+  dplyr::select(CpG, Direction) %>%
+  mutate(Direction = factor(Direction, levels = c("Inverse", "Positive", "Both", "Non-significant"))) %>%
+  left_join(dplyr::select(agedf, Dir, CpG), by = "CpG") %>%
+  mutate(Dir = ifelse(is.na(Dir), "Constant", Dir)) 
 
-
-## Positive vs negative
-age_pos <- ageSum %>%
-  filter(Direction %in% c("Positive", "Inverse")) %>%
-  group_by(Direction) %>%
-  select(-Type0) %>%
-  arrange(desc(Direction)) %>%
-  g2(ageG) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", 1:3) %>% 
-  spread(par, Value) %>%
-  ggplot(aes(x = Region, y = OR)) + 
-  geom_bar(stat = "identity", position=position_dodge(), 
-           fill = "#009E73") + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "Methylation change during chilhood", limits = ageG) +
-  theme_bw() +
-  ggtitle("Positive vs Inverse CpGs") + 
-  theme(plot.title = element_text(hjust = 0.5))
-
-png("paper/CpGEnrichAge_new.png", width = 3000, height = 1500, res = 300)
-plot_grid(age_all, age_pos, nrow = 1, labels = "AUTO")
+png("paper/CpGEnrichAge_methLevels.png", width = 3000, height = 2000, res = 300)
+age_meth <-  as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, median) %>%
+  right_join(tmp, by = "CpG") %>%
+  mutate(Significant = ifelse(Direction == "Non-significant", "Non-eQTM", "eQTM")) %>%
+  ggplot(aes(x = Dir, y = median, fill = Significant)) +
+  geom_violin() +
+  scale_x_discrete(name = "Methylation during childhood") +
+  scale_y_continuous(name = "Median methylation") +
+  scale_fill_manual(name = "", values = c("#999999", "#FFFFFF")) +
+  theme_bw()
+age_meth
 dev.off()
 
-
-
-
-
-## Overlap with literature ####
-#### EWAS Catalogue ####
+#### EWAS Catalog ####
 ewasdf <- read.delim(gzfile("data/EWAS_Catalog_03-07-2019.txt.gz"))
 
 ## Restrict to results in blood and European
@@ -1186,179 +913,63 @@ CpGsSum %>%
   summarize(n = sum(mQTL),
             prop = mean(mQTL))
 
-ewasCatSum %>% 
-  group_by(CpG) %>% 
-  summarize(Cat = ifelse(n() == 2, "Exposure-Outcome", Category),
-            Combined = ifelse(unique(Combined) == "Non-significant", "Non-significant", "Significant")) %>%
-  group_by(Cat, Combined) %>% 
-  summarise(n = n()) %>%
-  spread(key = Cat, value = n) %>%
-  mutate(TotalCpGs = None + Exposure + `Exposure-Outcome` + Outcome, 
-       catalogue = Exposure + `Exposure-Outcome` + Outcome,
-       pCatalogue = catalogue/TotalCpGs,
-       pExp = Exposure/TotalCpGs,
-       pOutcome = Outcome/TotalCpGs,
-       pComb = `Exposure-Outcome`/TotalCpGs)
-  
 ewasCatSum2 <-  ewasCatSum %>% 
   group_by(CpG) %>% 
-  summarize(Cat = ifelse(n() == 2, "Exposure-Outcome", Category),
-            Combined = unique(Combined)) %>%
-  group_by(Combined, Cat) %>%
+  group_by(Present, Direction) %>%
   summarize(n = n()) %>%
-  mutate(Type0 = ifelse(Combined == "Non-significant", "Non-significant", "Significant")) %>%
-  spread(Cat, n) %>%
-  mutate(tot = Exposure + `Exposure-Outcome` + Outcome + None) %>%
-  select(-None)
-  
-catals <- c("Exposure", "Exposure-Outcome", "Outcome")
-
-
-allCatal <- ewasCatSum2 %>%
-  group_by(Type0) %>%
-  select(-Combined) %>%
-  summarize_all(list(sum)) %>%
-  arrange(desc(Type0)) %>%
-  g2(catals) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", 1:3) %>%
-  mutate(Type = "Significant")
+  spread(Present, n) %>%
+  mutate(Direction = factor(Direction)) %>%
+  rbind(filter(., Direction != "Non-significant") %>% 
+          summarize_all(fsum))  %>%
+  mutate(Direction = as.character(Direction)) %>%
+  select(Direction, Present, Absent)
 
 typesCatal <- lapply(types, function(t){
-  ewasCatSum2 %>%
-    filter(Combined %in% c(t, "Non-significant")) %>%
-    group_by(Combined) %>%
-    select(-Type0) %>%
-    summarize_all(list(sum)) %>%
-    arrange(Combined) %>%
-    g2(catals) %>%
+  rbind(filter(ewasCatSum2, Direction == t),
+        filter(ewasCatSum2, Direction == "Non-significant")) %>%
+    getOR(cols = 2:3) %>%
     as_tibble() %>%
     mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-    gather("Region", "Value", 1:3) %>%
-    mutate(Type = t)
+    mutate(Type = t, 
+           dataset = "EWAS Catalog" )
 })
 combCatal <- Reduce(rbind, typesCatal)
-combCatal <- rbind(allCatal, combCatal)
+
 
 png("paper/CpGEnrichCatalogue.png", width = 3000, height = 2000, res = 300)
 combCatal %>%
-  spread(par, Value) %>%
-  mutate(Type = factor(Type, levels = c("Significant", "Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both"))) %>%
-  ggplot(aes(x = Region, y = OR, fill = Type)) + 
+  spread(par, value) %>%
+  mutate(Type = factor(Type, levels = c("Significant", "Inverse", "Positive"))) %>%
+  ggplot(aes(x = Type, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "", limits = cats) +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
+  scale_x_discrete(name = "") +
+  scale_fill_manual(name = "CpG Type", values = c("#999999", "#E69F00", "#009E73")) +
   theme_bw() 
 dev.off()
 
-## Test specific exposures/outcomes ####
-### Select categories with > 200 CpGs
-expoCatal <- ewasdfF %>% 
-  group_by(Exposure) %>%
-  summarize(n = n()) %>%
-  filter(n > 200) %>%
-  pull(Exposure) %>%
-  as.character()
+catal_meth <- as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, median) %>%
+  right_join(ewasCatSum, by = "CpG") %>%
+  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM")) %>%
+  ggplot(aes(x = Present, y = median, fill = Significant)) +
+  geom_violin() +
+  scale_x_discrete(name = "Presence in EWAS catalogue") +
+  scale_y_continuous(name = "Median methylation") +
+  scale_fill_manual(name = "", values = c("#999999", "#FFFFFF")) +
+  theme_bw()
 
-## Exclude age and DNA methylation
-expoCatal <- expoCatal[-grep("Age|me..ylation", expoCatal)]
-## Exclude migration and disease
-expoCatal <- expoCatal[!expoCatal %in% c("Migration in Italy", "Lupus nephritis vs lupus without nephritis")] 
-## Group smoking in one category
-expoCatal[expoCatal %in% c("Current versus never smoking", "Former versus never smoking")] <- "Smoking"
-expoCatal[expoCatal == "Maternal smoking during pregnancy"] <- "Maternal smoking in pregnancy"
-expoCatal <- unique(expoCatal)
 
-dataCpGs <- CpGsSum$CpG
-expoMat <- sapply(expoCatal, function(x){
-  dataCpGs %in% ewasdfF[ewasdfF$Exposure == x, "CpG"]
-})
-
-## Test specific outcomes
-### Select categories with > 200 CpGs
-outCatal <- ewasdfF %>% 
-  group_by(Outcome) %>%
-  summarize(n = n()) %>%
-  filter(n > 200) %>%
-  pull(Outcome) %>%
-  as.character()
-## Exclude age and DNA methylation
-outCatal <- outCatal[outCatal != "DNA methylation"]
-outMat <- sapply(outCatal, function(x){
-  dataCpGs %in% ewasdfF[ewasdfF$Outcome == x, "CpG"]
-})
-colnames(outMat)[1] <- "BMI_Outcome"
-
-exps <- c(colnames(expoMat), colnames(outMat))
-
-expoSum <- cbind(CpGsSum, expoMat, outMat) %>%
-  as_tibble() %>%
-  group_by(Combined) %>%
-  select(-CpG, -Type, -Direction) %>%
-  summarize_all(sum) %>%
-  left_join(group_by(CpGsSum, Combined) %>% summarize(tot = n()), by = "Combined") %>%
-  mutate(Type0 = ifelse(Combined == "Non-significant", "Non-significant", "Significant"))
-
-allExps <- expoSum %>%
-  group_by(Type0) %>%
-  select(-Combined) %>%
-  summarize_all(list(sum)) %>%
-  arrange(desc(Type0)) %>%
-  g2(exps) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", seq_len(length(exps))) %>%
-  mutate(Type = "Significant")
-
-typesExps <- lapply(types, function(t){
-  expoSum %>%
-    filter(Combined %in% c(t, "Non-significant")) %>%
-    group_by(Combined) %>%
-    select(-Type0) %>%
-    summarize_all(list(sum)) %>%
-    arrange(Combined) %>%
-    g2(exps) %>%
-    as_tibble() %>%
-    mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-    gather("Region", "Value",seq_len(length(exps))) %>%
-    mutate(Type = t)
-})
-combExps <- Reduce(rbind, typesExps)
-combExps <- rbind(allExps, combExps)
-
-png("paper/CpGEnrichCatalogueExposures.png", width = 3000, height = 2000, res = 300)
-combExps %>%
-  spread(par, Value) %>%
-  mutate(Type = factor(Type, levels = c("Significant", "Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both")),
-         Group = ifelse(Region %in% c("Body mass index", "C-reactive protein", "Sex"), "Phenotype", 
-                        ifelse(Region %in% c("Autoantibody production in systemic lupus erythematosus", "HIV infection", "Primary Sjogrens syndrome", "Rheumatoid arthritis", "Schizophrenia"), "Disease", 
-                               ifelse(Region %in% c("BMI_Outcome", "Total serum IgE"), "Outcome", "Exposure")))) %>%
-  ggplot(aes(x = Region, y = OR, fill = Type)) + 
-  geom_bar(stat = "identity", position=position_dodge()) + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  facet_grid(~ Group, scales = "free", space = "free_x") +
-  scale_x_discrete(name = "") +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
-  theme_bw() +
-  theme(axis.text = element_text(angle = 45))
-dev.off()
 
 ## EWAS Atlas #### 
 ## Download time: 27/11/2019
 atAssoc <- read.delim("data/EWAS_Atlas_associations.tsv")
 atStudy <- read.delim("data/EWAS_Atlas_studies.tsv")
 atCohort <- read.delim("data/EWAS_Atlas_cohorts.tsv")
-
-
-
 
 ## Combined traits (web page does not allow to download all files)
 # traitsL <- lapply(1:5, function(x) read.csv(paste0("data/tableExport", x, ".csv")))
@@ -1395,40 +1006,35 @@ t <- table(atlasSum$Changed, atlasSum$Type != "Non-significant")
 t[1]/t[2]/t[3]*t[4]
 
 
-
 ## Get summary statistics
 atlasSum %>% 
-  group_by(Type0) %>%
+  group_by(Type) %>%
   select(ends_with("in")) %>%
   summarize_all(sum)
   
 
+atlasSum2 <-  atlasSum %>% 
+  mutate(Present = ifelse(Changed, "Present", "Absent")) %>%
+  group_by(Present, Direction) %>%
+  summarize(n = n()) %>%
+  spread(Present, n) %>%
+  mutate(Direction = factor(Direction)) %>%
+  rbind(filter(., Direction != "Non-significant") %>% 
+          summarize_all(fsum))  %>%
+  mutate(Direction = as.character(Direction)) %>%
+  select(Direction, Present, Absent)
 
-allAtlas <- atlasSum %>%
-  group_by(Type0) %>%
-  select(ends_with("in"), ends_with("ou")) %>%
-  summarize_all(list(sum)) %>%
-  arrange(desc(Type0)) %>%
-  g(eff) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", seq_len(length(eff))) %>%
-  mutate(Type = "Significant")
-
+  
 typesAtlas <- lapply(types, function(t){
-  atlasSum %>%
-    filter(Combined %in% c(t, "Non-significant")) %>%
-    group_by(Combined) %>%
-    select(ends_with("in"), ends_with("ou")) %>%
-    summarize_all(list(sum)) %>%
-    g(eff) %>%
+  rbind(filter(atlasSum2, Direction == t),
+        filter(atlasSum2, Direction == "Non-significant")) %>%
+    getOR(cols = 2:3) %>%
     as_tibble() %>%
     mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-    gather("Region", "Value", seq_len(length(eff))) %>%
-    mutate(Type = t)
+    mutate(Type = t, 
+           dataset = "EWAS Atlas")
 })
 combAtlas <- Reduce(rbind, typesAtlas)
-combAtlas <- rbind(allAtlas, combAtlas)
 
 
 png("paper/CpGEnrichAtlas.png", width = 3000, height = 2000, res = 300)
@@ -1446,103 +1052,47 @@ combAtlas %>%
   theme_bw() 
 dev.off()
 
-## Test specific exposures/outcomes ####
-### Select categories with > 200 CpGs
-expoAtlas <- atlasDFsel %>% 
-  group_by(Trait) %>%
-  summarize(n = n()) %>%
-  filter(n > 200) %>%
-  pull(Trait) %>%
-  as.character()
-
-dataCpGs <- CpGsSum$CpG
-expoAtlasMat <- sapply(expoAtlas, function(x){
-  dataCpGs %in% atlasDFsel[atlasDFsel$Trait == x, "Probe.id", drop = TRUE]
-})
-expsA <- colnames(expoAtlasMat)
-expoA <- cbind(CpGsSum, expoAtlasMat) %>%
-  as_tibble() %>%
-  group_by(Combined) %>%
-  select(-CpG, -Type, -Direction) %>%
-  summarize_all(sum) %>%
-  left_join(group_by(CpGsSum, Combined) %>% summarize(tot = n()), by = "Combined") %>%
-  mutate(Type0 = ifelse(Combined == "Non-significant", "Non-significant", "Significant"))
-
-allExpsAt <- expoA %>%
-  group_by(Type0) %>%
-  select(-Combined) %>%
-  summarize_all(list(sum)) %>%
-  arrange(desc(Type0)) %>%
-  g2(expsA) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", seq_len(length(expsA))) %>%
-  mutate(Type = "Significant")
-
-typesExpsAt <- lapply(types, function(t){
-  expoA %>%
-    filter(Combined %in% c(t, "Non-significant")) %>%
-    group_by(Combined) %>%
-    select(-Type0) %>%
-    summarize_all(list(sum)) %>%
-    arrange(Combined) %>%
-    g2(expsA) %>%
-    as_tibble() %>%
-    mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-    gather("Region", "Value",seq_len(length(expsA))) %>%
-    mutate(Type = t)
-})
-combExpsA <- Reduce(rbind, typesExpsAt)
-combExpsA <- rbind(allExpsAt, combExpsA)
-combExpsA <- combExpsA %>%
-  spread(par, Value) 
-
-expsSum <- combExpsA %>%
-  mutate(Trait = Region) %>%
-  group_by(Trait) %>%
-  summarize(Sig = any(p.val < 1e-3)) %>%
-  left_join(group_by(atlasDFsel, Trait) %>% summarize(n = n()), by = "Trait")
-
-## Only plot exposures enriched in at least one CpG group
-plotExps <- filter(expsSum, Sig) %>% pull(Trait)
-
-a <- combExpsA %>%
-  mutate(CpGType = factor(Type, levels = c("Significant", "Mono_Inverse", "Mono_Positive", "Multi_Inverse", "Multi_Positive", "Multi_Both")),
-         Trait = Region) %>%
-  select(-Type) %>%
-  left_join(select(traits, Trait, Type), by = "Trait") %>%
-  mutate(Group = ifelse(Type %in% c("cancer", "non-cancer disease"), "Disease", "Exposure")) %>%
-  filter(Trait %in% plotExps) %>%
-  ## Change OR of 0 to OR of 1 to avoid having meaningless bars in the plot
-  mutate(OR = ifelse(OR == 0, 1, OR))
-p1 <- a %>%
-  filter(Group == "Disease") %>%
-  ggplot(aes(x = Region, y = OR, fill = CpGType)) + 
+png("paper/CpGEnrichEWASdbs.png", width = 3000, height = 2000, res = 300)
+ewas_db <- combCatal %>%
+  rbind(combAtlas) %>%
+  spread(par, value) %>%
+  mutate(Type = factor(Type, levels = c("eQTM", "Inverse", "Positive"))) %>%
+  ggplot(aes(x = Type, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
-  facet_grid(~ Type, scales = "free", space = "free_x") +
   scale_x_discrete(name = "") +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
+  scale_fill_manual(name = "CpG Type", values = c("#999999", "#E69F00", "#009E73")) +
   theme_bw() +
-  theme(axis.text = element_text(angle = 45))
-p2 <- a %>%
-  filter(Group != "Disease") %>%
-  ggplot(aes(x = Region, y = OR, fill = CpGType)) + 
-  geom_bar(stat = "identity", position=position_dodge()) + 
-  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
-  scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  geom_hline(yintercept = 1) +
-  facet_grid(~ Type, scales = "free", space = "free_x") +
-  scale_x_discrete(name = "") +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#56B4E9", "#E69F00", "#0072B2", "#D55E00", "#009E73")) +
-  theme_bw() +
-  theme(axis.text = element_text(angle = 45))
-
-png("paper/CpGEnrichAtlasExposures.png", width = 3500, height = 4000, res = 300)
-plot_grid(p1, p2, ncol = 1, labels = "")
+  facet_grid(~  dataset)
+ewas_db
 dev.off()
 
+png("paper/CpGEnrichEWASdbs_methLevels.png", width = 3000, height = 2000, res = 300)
+as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, median) %>%
+  right_join(ewasCatSum, by = "CpG") %>%
+  mutate(Significant = ifelse(Type == "Non-significant", "Non-eQTM", "eQTM"),
+         Catalogue = Present) %>%
+  select(Catalogue, Significant, CpG, median) %>%
+  right_join(atlasSum, by = "CpG") %>%
+  mutate(Atlas = ifelse(Changed, "Present", "Absent")) %>%
+  select(Catalogue, Atlas, Significant, median) %>%
+  gather(Database, Status, 1:2) %>%
+  mutate(Database = ifelse(Database == "Catalogue", "EWAS Catalog", "EWAS Atlas")) %>%
+  ggplot(aes(x = Status, y = median, fill = Significant)) +
+  geom_violin() +
+  scale_x_discrete(name = "Presence in catalogue") +
+  scale_y_continuous(name = "Median methylation") +
+  scale_fill_manual(name = "", values = c("#999999", "#FFFFFF")) +
+  facet_grid(~ Database) +
+  theme_bw()
+dev.off()
+
+### Make combined plot with age variant CpGs
+png("paper/CpGEnrich_EWASdbs_age.png", width = 3000, height = 2500, res = 300)
+plot_grid(ewas_db, age_var, ncol = 1, labels = "AUTO")
+dev.off()
