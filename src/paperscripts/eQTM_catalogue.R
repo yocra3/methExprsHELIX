@@ -813,7 +813,7 @@ mergeTB <- modU %>%
   left_join(modC, by = c("CpG", "TC")) %>%
   as_tibble() %>%
   filter(sigPair.x == TRUE | sigPair.y == TRUE) %>%
-  mutate(sigType = ifelse(sigPair.x == TRUE, ifelse(sigPair.y == TRUE, "Common", "Main"), "Cell"))
+  mutate(sigType = ifelse(sigPair.x == TRUE, ifelse(sigPair.y == TRUE, "Shared", "Main"), "Cell"))
 
 
 t <- mergeTB %>%
@@ -881,16 +881,22 @@ png("paper/eQTMs_CpGs_TC_distr_cell.png", width = 2500, height = 1500, res = 300
 plot_grid(CpG_plot2, TC_plot2, labels = "AUTO", ncol = 2)
 dev.off()
 
-
-png("paper/CompModelsP_values.png", width = 1500, height = 1200, res = 300)
-ggplot(mergeTB, aes(x = -log10(p.value.y), y = -log10(p.value.x), col = sigType)) +
+pvals_comp <- mergeTB %>%
+  mutate(sigType = factor(sigType, levels = c("Shared", "Main", "Cell"))) %>%
+  ggplot(aes(x = -log10(p.value.y), y = -log10(p.value.x), col = sigType)) +
   geom_point() +
   scale_x_continuous(name = "Cell adjusted") + 
   scale_y_continuous("Main model") + 
   ggtitle("-log10 p-values comparative") +
-  theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none") +
   geom_abline(slope = 1, linetype = "dashed") +
-  scale_color_manual(name = "", values = c("#999999", "#0072B2", "#E69F00"))
+  facet_wrap(. ~ sigType) +
+  scale_color_manual(name = "", values = c("#85C0F9", "#F5793A", "#0F2080"))
+  
+png("paper/CompModelsP_values.png", width = 1500, height = 1200, res = 300)
+pvals_comp
 dev.off()
 
 ## Distance distribution
@@ -898,10 +904,11 @@ png("paper/dist_distr_main_eQTMs.png", width = 1700, height = 800, res = 300)
 mergeTB %>%
   filter(sigPair.x) %>%
   inner_join(overDF, by = c("TC", "CpG")) %>%
+  mutate(sigType = factor(sigType, levels = c("Shared", "Main"))) %>%
   ggplot(aes(x = Distance, color = sigType)) +
   geom_density() +
   theme_bw() +
-  scale_color_manual(name = "", values = c("#0072B2", "#E69F00")) +
+  scale_color_manual(name = "", values = c("#85C0F9", "#F5793A")) +
   scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
   scale_y_continuous(name = "") + 
@@ -963,6 +970,27 @@ bottom <- filter(mergeTB, sigType != "Common") %>%
   facet_wrap(. ~ sigType) +
   geom_smooth(method = "lm") 
 
+
+estim_comp <- mergeTB %>% 
+  mutate(sigType = factor(sigType, levels = c("Shared", "Main", "Cell"))) %>%
+  ggplot(aes(x = FC.y/10, y = FC.x/10, col = sigType)) +
+  geom_point() +
+  geom_abline(slope = 1, linetype = "dashed") +
+  scale_x_continuous(name = "Cell adjusted") + 
+  scale_y_continuous("Main model") + 
+  ggtitle("Estimates comparative") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none") +
+  scale_color_manual(name = "", values = c("#85C0F9", "#F5793A", "#0F2080")) +
+  facet_wrap(. ~ sigType) +
+  geom_smooth(method = "lm") 
+
+
+png("paper/CompModelsEstimatesPvals.png", width = 2500, height = 2000, res = 300)
+plot_grid(estim_comp, pvals_comp, nrow = 2, labels = c("A", "B"))
+dev.off()
+
 png("paper/CompModelsEstimates.png", width = 2500, height = 2500, res = 300)
 plot_grid(top, bottom, nrow = 2)
 dev.off()
@@ -1002,6 +1030,59 @@ g <- function(x, gpos, cols = c("in", "ou")){
 }
 
 sum2 <- function(x) sum(!x)
+
+methChromSt <- as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, eval(chromStates)) %>%
+  mutate(Type = ifelse(CpG %in% mainCpGs, "Main", ifelse(CpG %in% comCpGs, "Shared", "non-eQTMs"))) %>%
+  group_by(Type) %>%
+  summarize_at(chromStates, list(sum = sum, sum2 = sum2, prop = mean))
+
+
+chromSt_modComp_prop_plot <- methChromSt %>%
+  select(Type, ends_with("prop")) %>%
+  gather(categories, proportion, 2:(2+length(chromStates) - 1)) %>%
+  ungroup() %>%
+  mutate(Type = factor(Type,  levels = c("non-eQTMs", "Shared", "Main")),
+         categories = gsub("_prop", "", categories),
+         Group = factor(ifelse(categories %in% c("TssA", "TssAFlnk"), "TssProxProm",
+                               ifelse(categories %in% c("Tx", "TxWk"), "ActTrans", 
+                                      ifelse(categories %in% c("Enh", "EnhG"), "Enhancer", 
+                                             ifelse(categories %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
+                                                    ifelse(categories %in% c("ReprPC", "ReprPCWk"), "ReprPoly", categories)
+                                             )
+                                      )
+                               )
+         ), 
+         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
+         ),
+         categories = factor(categories, levels = chromStates)) %>%
+  ggplot(aes(x = categories, y = proportion*100, fill = Type)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  scale_x_discrete(name = "ROADMAP chromatin states") +
+  facet_wrap(~ Group, scales = "free_x") +  
+  scale_y_continuous(name = "Proportion of CpGs (%)") +
+  scale_fill_manual(name = "CpG Type", values = c("#000000", "#85C0F9", "#F5793A")) +
+  theme_bw()
+
+png("paper/chromStatesProp_model.png", width = 2500, height = 2000, res = 300)
+chromSt_modComp_prop_plot
+dev.off()
+
+chromSt_enrich_compMods <- lapply(c("Common", "Main"), function(t){
+  rbind(filter(methChromSt, Type == t),
+        filter(methChromSt, Type == "non-eQTMs")) %>%
+    select(ends_with("sum"), ends_with("sum2")) %>%
+    g(chromStates, cols = c("_sum", "_sum2")) %>%
+    as_tibble() %>%
+    mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+    gather("Region", "Value", 1:15) %>%
+    mutate(Type = t)
+})
+chromSt_enrich_compMods <- Reduce(rbind, chromSt_enrich_compMods)
+
+
+
 chrom_model <- as_tibble(methyAnnot) %>%
   filter(CpG %in% c(mainCpGs, comCpGs)) %>%
   mutate(Type = ifelse(CpG %in% mainCpGs, "Main", "Common")) %>%
@@ -1038,6 +1119,9 @@ chrom_model <- as_tibble(methyAnnot) %>%
   theme_bw() +
   ggtitle("Enrichment main vs common eQTMs") + 
   theme(plot.title = element_text(hjust = 0.5))
+
+
+
 png("paper/enrich_chromStates_model.png", width = 2500, height = 1500, res = 300)
 chrom_model
 dev.off()
@@ -1154,15 +1238,18 @@ data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, comCpGs), "Fstat"]
 # F-statistic:  3586 on 1 and 35063 DF,  p-value: < 2.2e-16
 
 png("paper/CompModelsCpGCellSpecific.png", width = 1500, height = 1000, res = 300)
-data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, comCpGs), "Fstat"],
-           Type = rep(c("Main", "Common"), c(length(adjCpGs), length(comCpGs)))) %>%
+methCell_compMods <- data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, comCpGs), "Fstat"],
+           Type = factor(rep(c("Main", "Shared"), c(length(adjCpGs), length(comCpGs))),
+                         levels = c("Shared", "Main"))) %>%
   ggplot(aes(y = log10(Fstat), x = Type, fill = Type)) + 
   geom_boxplot() +
   theme_bw() +
   scale_x_discrete(name = "") +
-  scale_fill_manual(name = "", values = c("#0072B2", "#E69F00")) +
+  scale_fill_manual(name = "", values = c("#85C0F9", "#F5793A")) +
   ggtitle("Methylation cell-type specificity") + 
-  theme(plot.title = element_text(hjust = 0.5))
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none")
+methCell_compMods
 dev.off()
 
 
@@ -1200,23 +1287,30 @@ comGenes.f <- setdiff(comGenes, mainGenes)
 bluep_res <- topTable(fit, n = Inf) %>% 
   mutate(gene = rownames(.),
          cat = ifelse(gene %in% mainGenes.f, "Main", 
-                      ifelse(gene %in% comGenes.f, "Common", "None"))) %>%
+                      ifelse(gene %in% comGenes.f, "Shared", "None")),
+         cat = factor(cat, levels = c("Shared", "Main"))) %>%
   filter(cat != "None")
 
 summary(lm(formula = log10(F) ~ cat, data = bluep_res))
   
 png("paper/CompModelsGenesCellSpecific.png", width = 1500, height = 1000, res = 300)
-bluep_res %>%
+exprCell_compMods <- bluep_res %>%
   ggplot(aes(y = log10(F), x = cat, fill = cat)) + 
   geom_boxplot() +
   theme_bw() +
   scale_x_discrete(name = "") +
-  scale_fill_manual(name = "", values = c("#0072B2", "#E69F00")) +
+  scale_y_continuous("log10(Fstat)") +
+  scale_fill_manual(name = "", values = c("#85C0F9", "#F5793A")) +
   ggtitle("Gene expression cell-type specificity") + 
-  theme(plot.title = element_text(hjust = 0.5))
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none")
+exprCell_compMods
 dev.off()
 
 
+png("paper/CompModelsCellSpecific.png", width = 2500, height = 1000, res = 300)
+plot_grid(methCell_compMods, exprCell_compMods, nrow = 1, labels = "AUTO")
+dev.off()
 
 
 bluep_mat %>% group_by(mod) %>% summarize(m = median(log(v)))

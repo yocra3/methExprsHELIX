@@ -463,7 +463,8 @@ combMethLevs <- Reduce(rbind, typesMethLevs)
 
 methLevsPlot <- combMethLevs %>%
   spread(par, Value) %>%
-  mutate(Type = factor(Type, levels = c("eQTM", "Inverse", "Positive"))) %>%
+  mutate(Type = ifelse(Type == "eQTM", "All", Type),
+         Type = factor(Type, levels = c("All", "Inverse", "Positive"))) %>%
   ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
@@ -471,7 +472,7 @@ methLevsPlot <- combMethLevs %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Methylation Levels", limits = cats, labels = tools::toTitleCase(cats)) +
-  scale_fill_manual(name = "CpG Type", values =  c("#999999", "#E69F00", "#009E73")) +
+  scale_fill_manual(name = "eQTM Type", values = c("#999999", "#E69F00", "#009E73")) +
   theme_bw() 
 
 png("paper/CpGEnrichMethLevels.png", width = 3000, height = 2000, res = 300)
@@ -538,7 +539,8 @@ combIsland <- Reduce(rbind, typesIsland)
 
 cpgPosPlot <- combIsland %>%
   spread(par, Value) %>%
-  mutate(Type = factor(Type, levels = c("eQTM", "Inverse", "Positive"))) %>%
+  mutate(Type = ifelse(Type == "eQTM", "All", Type),
+         Type = factor(Type, levels = c("All", "Inverse", "Positive"))) %>%
   ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
@@ -546,7 +548,7 @@ cpgPosPlot <- combIsland %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "CpG Island position", limits = islandStates) +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#E69F00", "#009E73")) +
+  scale_fill_manual(name = "eQTM Type", values = c("#999999", "#E69F00", "#009E73")) +
   theme_bw() 
 
 png("paper/CpGEnrichIsland.png", width = 3000, height = 2000, res = 300)
@@ -641,8 +643,8 @@ combChromSt <- Reduce(rbind, typesChromSt)
 png("paper/CpGEnrichChromStates.png", width = 3000, height = 2000, res = 300)
 chromStatesPlot <- combChromSt %>%
   spread(par, Value) %>%
-  mutate(Type = factor(Type, 
-                       levels = c("eQTM", "Inverse", "Positive")),
+  mutate(Type = ifelse(Type == "eQTM", "All", Type),
+         Type = factor(Type, levels = c("All", "Inverse", "Positive")),
          Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
                                ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
                                       ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
@@ -662,12 +664,11 @@ chromStatesPlot <- combChromSt %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "ROADMAP chromatin states") +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#E69F00", "#009E73")) +
+  scale_fill_manual(name = "eQTM Type", values = c("#999999", "#E69F00", "#009E73")) +
   facet_wrap(~ Group, scales = "free_x") +
   theme_bw() 
 chromStatesPlot
 dev.off()
-
 
 ## Chromatin states vs methylation levels
 chrom_all_meth <-   as_tibble(methyAnnot) %>%
@@ -802,10 +803,10 @@ ageSum <- CpGsSum %>%
           summarize_all(fsum)) %>%
   mutate(Direction = as.character(Direction),
          Direction = ifelse(is.na(Direction), "eQTM", Direction),
-         Changed = Decreased + Increased,
-         tot = Changed + Constant)
+         Variable = Decreased + Increased,
+         tot = Variable + Constant)
 
-ageG <- c("Changed", "Decreased", "Increased")
+ageG <- c("Variable", "Decreased", "Increased")
 
 
 typesAge <- lapply(types, function(t){
@@ -822,7 +823,8 @@ combAge <- Reduce(rbind, typesAge)
 png("paper/CpGEnrichAge.png", width = 3000, height = 2000, res = 300)
 age_var <- combAge %>%
   spread(par, Value) %>%
-  mutate(Type = factor(Type, levels = c("eQTM", "Inverse", "Positive"))) %>%
+  mutate(Type = ifelse(Type == "eQTM", "All", Type),
+         Type = factor(Type, levels = c("All", "Inverse", "Positive"))) %>%
   ggplot(aes(x = Region, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
@@ -830,7 +832,7 @@ age_var <- combAge %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Methylation during childhood", limits = ageG) +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#E69F00", "#009E73")) +
+  scale_fill_manual(name = "eQTM Type", values = c("#999999", "#E69F00", "#009E73")) +
   theme_bw() 
 age_var
 dev.off()
@@ -1056,7 +1058,8 @@ png("paper/CpGEnrichEWASdbs.png", width = 3000, height = 2000, res = 300)
 ewas_db <- combCatal %>%
   rbind(combAtlas) %>%
   spread(par, value) %>%
-  mutate(Type = factor(Type, levels = c("eQTM", "Inverse", "Positive"))) %>%
+  mutate(Type = ifelse(Type == "eQTM", "All", Type),
+         Type = factor(Type, levels = c("All", "Inverse", "Positive"))) %>%
   ggplot(aes(x = Type, y = OR, fill = Type)) + 
   geom_bar(stat = "identity", position=position_dodge()) + 
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
@@ -1064,7 +1067,7 @@ ewas_db <- combCatal %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "") +
-  scale_fill_manual(name = "CpG Type", values = c("#999999", "#E69F00", "#009E73")) +
+  scale_fill_manual(name = "eQTM Type", values = c("#999999", "#E69F00", "#009E73")) +
   theme_bw() +
   facet_grid(~  dataset)
 ewas_db
