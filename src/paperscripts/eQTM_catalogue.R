@@ -1382,61 +1382,228 @@ filter(spTrans,  TC %in% tcs1 & CpG %in% cpgs1)
 
 
 
-## Compare with other eQTM studies (Bonder) PMID: 27918535 ####
-bonder <- read.delim("data/Bonder_cis_eQTMs.txt")
+## Compare with other eQTM studies (Kennedy) PMID:  29914364 ####
+eQTM_blood <- read.delim("data/Kennedy_eQTM_catalogue_wholeBlood.txt", as.is = TRUE)
+eQTM_monocytes <- read.delim("data/Kennedy_eQTM_catalogue_Monocytes.txt", as.is = TRUE)
 
 ## Remove CpGs and Genes not present in HELIX
-bonder.f <- subset(bonder, SNPName %in% unique(modU$CpG))
-bonder.f <- subset(bonder.f, HGNCName %in% expGenes)
+eQTM_blood.f <- subset(eQTM_blood, CpG.probe %in% unique(modU$CpG) & 
+                         annot.gene %in% expGenes)
+eQTM_monocytes.f <- subset(eQTM_monocytes, CpG.probe %in% unique(modU$CpG) & 
+                         annot.gene %in% expGenes)
 
-## Add SYMBOL to significant pairs
-sigDf_Annot <- sigDf %>%
+## Compare with main model
+blood.merge <- eQTM_blood.f %>%
+  mutate(CpG = CpG.probe, GeneSymbol_Affy = annot.gene) %>%
+  inner_join(modU_Annot, by = c("CpG", "GeneSymbol_Affy")) %>%
+  left_join(select(expAnnot, c("TC", "start", "stop")), by = "TC") %>%
+  mutate(sigType = ifelse(sigPair, ifelse(p.val < 1e-11, "Both", "Main"), 
+                          ifelse(p.val < 1e-11, "WholeBlood", "None")),
+         sigType = factor(sigType, levels = c("Both", "None", "Main", "WholeBlood")),
+         sigType2 = ifelse(sigPair, "Shared", "WholeBlood"))
+
+monocytes.merge <- eQTM_monocytes.f %>%
+  mutate(CpG = CpG.probe, GeneSymbol_Affy = annot.gene) %>%
+  inner_join(modU_Annot, by = c("CpG", "GeneSymbol_Affy")) %>%
+  mutate(sigType = ifelse(sigPair, ifelse(p.val < 1e-11, "Both", "Main"), 
+                          ifelse(p.val < 1e-11, "Monocytes", "None")),
+         sigType = factor(sigType, levels = c("Both", "None", "Main", "Monocytes")),
+         sigType2 = ifelse(sigPair, "Shared", "Monocytes"))
+
+blood.merge %>% group_by(sigType) %>% summarize(rFC = cor(FC, beta), 
+                                                pFC = cor.test(FC, beta)$p.value,
+                                                signConc = mean(sign(FC) == sign(beta)))
+blood.merge %>% group_by(sigType2) %>% summarize(rFC = cor(FC, beta), 
+                                                pFC = cor.test(FC, beta)$p.value,
+                                                signConc = mean(sign(FC) == sign(beta)))
+
+cor(monocytes.merge$FC, monocytes.merge$beta)
+cor(-log10(monocytes.merge$p.val + 1e-100), -log10(monocytes.merge$p.value))
+monocytes.merge %>% group_by(sigType) %>% summarize(rFC = cor(FC, beta), 
+                                                pFC = cor.test(FC, beta)$p.value,
+                                                signConc = mean(sign(FC) == sign(beta)))
+monocytes.merge %>% group_by(sigType2) %>% summarize(rFC = cor(FC, beta), 
+                                                 pFC = cor.test(FC, beta)$p.value,
+                                                 signConc = mean(sign(FC) == sign(beta)))
+
+table(blood.merge$sigType)
+table(monocytes.merge$sigType)
+
+table(blood.merge$sigType2)
+table(monocytes.merge$sigType2)
+
+#### Whole blood plots
+pWBFC <- blood.merge %>%
+  ggplot(aes(x = FC/10, y = beta, color = sigType)) +
+  geom_point() +
+  geom_abline(slope = 1, linetype = "dashed") +
+  scale_x_continuous(name = "Main model") + 
+  scale_y_continuous("Kennedy (Whole Blood)") + 
+  ggtitle("Estimates comparative") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none") +
+#  scale_color_manual(name = "", values = c("#85C0F9", "#F5793A", "#0F2080")) +
+  facet_wrap(. ~ sigType) +
+  geom_smooth(method = "lm") 
+
+
+pWBpval <- blood.merge %>%
+  ggplot(aes(x = -log10(p.value), y = -log10(p.val), color = sigType)) +
+  geom_point() +
+  geom_abline(slope = 1, linetype = "dashed") +
+  scale_x_continuous(name = "Main model") + 
+  scale_y_continuous("Kennedy (Whole Blood)") + 
+  ggtitle("-log10 p-value comparative") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none") +
+  #  scale_color_manual(name = "", values = c("#85C0F9", "#F5793A", "#0F2080")) +
+  facet_wrap(. ~ sigType)
+
+#### Monocyte plots
+pMONFC <- monocytes.merge %>%
+  ggplot(aes(x = FC/10, y = beta, color = sigType)) +
+  geom_point() +
+  geom_abline(slope = 1, linetype = "dashed") +
+  scale_x_continuous(name = "Main model") + 
+  scale_y_continuous("Kennedy (Monocytes)") + 
+  ggtitle("Estimates comparative") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none") +
+  #  scale_color_manual(name = "", values = c("#85C0F9", "#F5793A", "#0F2080")) +
+  facet_wrap(. ~ sigType) +
+  geom_smooth(method = "lm") 
+
+
+pMONpval <- monocytes.merge %>%
+  ggplot(aes(x = -log10(p.value), y = -log10(p.val), color = sigType)) +
+  geom_point() +
+  geom_abline(slope = 1, linetype = "dashed") +
+  scale_x_continuous(name = "Main model") + 
+  scale_y_continuous("Kennedy (Monocytes)") + 
+  ggtitle("-log10 p-value comparative") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none") +
+  #  scale_color_manual(name = "", values = c("#85C0F9", "#F5793A", "#0F2080")) +
+  facet_wrap(. ~ sigType)
+
+
+png("paper/ComparisonKennedyEQTM.png", width = 2500, height = 2000, res = 300)
+plot_grid(pWBFC, pWBpval, pMONFC, pMONpval, nrow = 2, ncol = 2, labels = c("A", "", "B", ""))
+dev.off()
+
+## Compare with cell adjusted model
+modC_Annot <- modC %>%
   as_tibble() %>%
+  dplyr::select(CpG, TC, FC, p.value, sigPair) %>%
   left_join(dplyr::select(expAnnot, TC, GeneSymbol_Affy), by = "TC") %>%
   mutate(GeneAffy = strsplit(GeneSymbol_Affy, ";"))
 
-## Bonder summary (after filtering)
-length(unique(bonder.f$SNPName))
-# [1] 10198
-length(unique(bonder.f$HGNCName))
-# [1] 3223
+blood.cellmerge <- eQTM_blood.f %>%
+  mutate(CpG = CpG.probe, GeneSymbol_Affy = annot.gene) %>%
+  inner_join(modC_Annot, by = c("CpG", "GeneSymbol_Affy")) %>%
+  mutate(sigType = ifelse(sigPair, ifelse(p.val < 1e-11, "Both", "Cell"), 
+                          ifelse(p.val < 1e-11, "WholeBlood", "None")))
 
-## Common CpGs
-length(intersect(unique(bonder.f$SNPName), unique(sigDf_Annot$CpG)))
-# [1] 4750
-mean(unique(bonder.f$SNPName) %in% unique(sigDf_Annot$CpG))*100
-# [1] 46.57776
+monocytes.cellmerge <- eQTM_monocytes.f %>%
+  mutate(CpG = CpG.probe, GeneSymbol_Affy = annot.gene) %>%
+  inner_join(modC_Annot, by = c("CpG", "GeneSymbol_Affy")) %>%
+  mutate(sigType = ifelse(sigPair, ifelse(p.val < 1e-11, "Both", "Cell"), 
+                          ifelse(p.val < 1e-11, "Monocytes", "None")))
 
-## Common Genes
-sigGenes <- unique(unlist(sigDf_Annot$GeneAffy))
-length(intersect(unique(bonder.f$HGNCName), unique(sigDf_Annot$GeneAffy)))
-# [1] 2003
-mean(unique(bonder.f$HGNCName) %in% unique(sigDf_Annot$GeneAffy))*100
-# [1] 62.14707
+cor(blood.cellmerge$FC, blood.cellmerge$beta )
+cor(monocytes.cellmerge$FC, monocytes.cellmerge$beta )
+
+table(blood.cellmerge$sigType)
+table(monocytes.cellmerge$sigType)
 
 
-## Common Pairs
-bonder.f$pair <- paste(bonder.f$SNPName, bonder.f$HGNCName)
+monocytes.exclusive <- semi_join(monocytes.merge, blood.merge, by =  c("CpG", "GeneSymbol_Affy") )
+monocytes.cellexclusive <- semi_join(monocytes.cellmerge, blood.cellmerge, by =  c("CpG", "GeneSymbol_Affy") )
 
-sigPairs <- lapply(seq_len(nrow(sigDf_Annot)), function(x) {
-  paste(sigDf_Annot[x, "CpG"], unlist(sigDf_Annot[x, "GeneAffy"]) )
-})
+table(monocytes.exclusive$sigType)
+table(monocytes.cellexclusive$sigType)
 
-length(intersect(bonder.f$pair, unlist(sigPairs)))
-# [1] 4002
-mean(bonder.f$pair %in% unlist(sigPairs))*100
-# [1] 28.0783
+monocytes.exclusive %>% group_by(sigType) %>% summarize(rFC = cor(FC, beta), 
+                                                            pFC = cor.test(FC, beta)$p.value,
+                                                            rPval = cor(-log10(p.val + 1e-228), -log10(p.value)), 
+                                                            pPval = cor.test(-log10(p.val + 1e-228), -log10(p.value))$p.value)
 
-## Restrict comparison to pairs present in HELIX dataset
-allPairs <- lapply(seq_len(nrow(modU_Annot)), function(x) {
-  paste(modU_Annot[x, "CpG"], unlist(modU_Annot[x, "GeneAffy"]) )
-})
+monocytes.cellexclusive %>% group_by(sigType) %>% summarize(rFC = cor(FC, beta), 
+                                                    pFC = cor.test(FC, beta)$p.value,
+                                                    rPval = cor(-log10(p.val + 1e-228), -log10(p.value)), 
+                                                    pPval = cor.test(-log10(p.val + 1e-228), -log10(p.value))$p.value)
 
-f <- function(x) mean(as.numeric(strsplit(as.character(x), ";")[[1]]))
 
-bonder.merge <- bonder.f %>%
-  mutate(CpG = SNPName, GeneSymbol_Affy = HGNCName,
-         dir = sapply(IncludedDatasetsCorrelationCoefficient, f)) %>%
-  left_join(sigDf_Annot, by = c("CpG", "GeneSymbol_Affy"))
+## Comparison catalogue pairs in Kennedy
+monocytes.merge$pair <- paste(monocytes.merge$CpG, monocytes.merge$TC)
+blood.merge$pair <- paste(blood.merge$CpG, blood.merge$TC)
+modU_Annot$MESA <- ifelse(paste(modU_Annot$CpG, modU_Annot$TC) %in% monocytes.merge$pair, 
+                          "MESA", "not in MESA")
+modU_Annot$GTP <- ifelse(paste(modU_Annot$CpG, modU_Annot$TC) %in% blood.merge$pair, 
+                          "GTP", "not in GTP")
+modU_Annot$adults <- ifelse(modU_Annot$sigPair, 
+                           ifelse(modU_Annot$MESA == "MESA" | modU_Annot$GTP == "GTP", "Shared", "Children"), 
+                           "Other")
 
-table(bonder.merge$FC > 0, bonder.merge$dir > 0)
+modU_Annot %>% filter(sigPair == TRUE) %>% group_by(GTP) %>% 
+  summarize(m = median(-log10(p.value)))
+modU_Annot %>% filter(sigPair == TRUE) %>% group_by(MESA) %>% 
+  summarize(m = median(-log10(p.value)))
+modU_Annot %>% filter(sigPair == TRUE) %>% group_by(adults) %>% 
+  summarize(m = median(-log10(p.value)))
+
+modU_Annot %>% filter(sigPair == TRUE) %>% group_by(MESA) %>% 
+  summarize(m = median(p.value))
+modU_Annot %>% filter(sigPair == TRUE) %>% group_by(GTP) %>% 
+  summarize(m = median(p.value))
+modU_Annot %>% filter(sigPair == TRUE) %>% group_by(adults) %>% 
+  summarize(m = median(p.value))
+
+
+modU_comp$MESA <- ifelse(paste(modU_comp$CpG, modU_comp$TC) %in% monocytes.merge$pair, 
+                         "p-value < 1e-5", "p-value > 1e-5")
+modU_comp$GTP <- ifelse(paste(modU_comp$CpG, modU_comp$TC) %in% blood.merge$pair, 
+                         "p-value < 1e-5", "p-value > 1e-5")
+modU_comp$adult <- ifelse(modU_comp$sigPair, 
+                           ifelse(modU_comp$MESA == "p-value < 1e-5" | modU_comp$GTP == "p-value < 1e-5", "Shared", "Children"), 
+                           "Other")
+
+
+ks.test(abs(subset(modU_comp, sigPair & adult == "Shared")$FC)/10,
+        abs(subset(modU_comp, sigPair & adult == "Children")$FC)/10)
+
+modU_Annot %>% filter(sigPair == TRUE) %>% group_by(adult) %>% 
+  summarize(m = median(abs(FC)/10))
+
+modU_comp %>% filter(sigPair == TRUE) %>% group_by(adult) %>% 
+  summarize(m = median(SD))
+
+
+modU_comp %>% filter(sigPair == TRUE) %>% ggplot(aes(x = abs(FC), color = adult)) +
+  geom_density() + scale_x_continuous(limits = c(0, 6))
+modU_comp %>% filter(sigPair == TRUE) %>% ggplot(aes(x = SD, color = adult)) +
+  geom_density() + scale_x_continuous(limits = c(0, 3))
+ks.test(abs(subset(modU_comp, sigPair & adult == "Shared")$SD),
+        abs(subset(modU_comp, sigPair & adult == "Children")$SD))
+
+
+plot_all <- modU_comp %>% filter(sigPair == TRUE) %>% 
+  mutate(Type = ifelse(adult == "Children", "Children-specific", "Children and adult shared")) %>%
+  ggplot(aes(x = Distance, color = Type)) +
+  geom_density() +
+  theme_bw() + 
+  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
+                     labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
+  scale_y_continuous(name = "") + 
+  ggtitle("CpG-TC Distance eQTMs") +
+  scale_color_discrete(name = "") +
+  theme(plot.title = element_text(hjust = 0.5))
+png("paper/distance_distr_Kennedy.png", width = 2000, height = 1000, res = 300)
+plot_all
+dev.off()
+
+
