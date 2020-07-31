@@ -42,9 +42,8 @@ h2tot <- herm %>%
   ggplot(aes(x = nCat, y = h2_total)) + 
   geom_boxplot() +
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
-  ggtitle("Total Heritability") +
-  scale_x_discrete(name = "num of TCs associated with a CpG") +
-  scale_y_continuous(name = "h2", limits = c(0, 1)) +
+  scale_x_discrete(name = "Number of TCs associated with a CpG") +
+  scale_y_continuous(name = "Total heritability", limits = c(0, 1)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
         legend.position = "none")
@@ -53,80 +52,41 @@ h2SNP <- herm %>%
   ggplot(aes(x = nCat, y = h2_total)) + 
   geom_boxplot() + 
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
-  ggtitle("SNP Heritability") +
-  scale_x_discrete(name = "num of TCs associated with a CpG") +
-  scale_y_continuous(name = "h2", limits = c(0, 1)) +
+  scale_x_discrete(name = "Number of TCs associated with a CpG") +
+  scale_y_continuous(name = "SNP heritability", limits = c(0, 1)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
         legend.position = "none")
 
-
-
 herm %>%
-  mutate(sig = ifelse(Combined == "Non-significant", "Non-significant", "Significant"),
+  mutate(sig = ifelse(nTC == 0, "Non-significant", "Significant"),
          sig = factor(sig, levels = c("Non-significant", "Significant"))) %>%
-  glm(h2_total ~ sig, family = "binomial", .) %>%
-  summary()
-# Call:                                                                                                                                                                   [15/409]
-# glm(formula = h2_total ~ sig, family = "binomial", data = .)
-# Deviance Residuals:
-#   Min       1Q   Median       3Q      Max
-# -1.1210  -0.4158  -0.1725   0.2455   1.8392
-# 
-# Coefficients:
-#   Estimate Std. Error z value Pr(>|z|)
-# (Intercept)    -1.574966   0.004528 -347.86   <2e-16 ***
-#   sigSignificant  1.440844   0.014891   96.76   <2e-16 ***
-#   
+  group_by(sig) %>%
+  summarize(m = median(h2_total))
+
+wilcox.test(subset(herm, nTC == 0)$h2_total,
+            subset(herm, nTC != 0)$h2_total, conf.int = TRUE)
+
 herm %>%
-  mutate(sig = ifelse(Combined == "Non-significant", "Non-significant", "Significant"),
+  mutate(sig = ifelse(nTC == 0, "Non-significant", "Significant"),
          sig = factor(sig, levels = c("Non-significant", "Significant"))) %>%
-  glm(h2_SNPs ~ sig, family = "binomial", .) %>%
-  summary()
-# Call:
-#   glm(formula = h2_SNPs ~ sig, family = "binomial", data = .)
-# 
-# Deviance Residuals:
-#   Min        1Q    Median        3Q       Max
-# -0.70686  -0.34995  -0.30398   0.09453   2.31096
-# 
-# Coefficients:
-#   Estimate Std. Error z value Pr(>|z|)
-# (Intercept)    -2.762317   0.007221 -382.56   <2e-16 ***
-#   sigSignificant  1.502830   0.018521   81.14   <2e-16 ***
-#   
+  group_by(sig) %>%
+  summarize(m = median(h2_SNPs))
 
+wilcox.test(subset(herm, nTC == 0)$h2_SNPs,
+            subset(herm, nTC != 0)$h2_SNPs, conf.int = TRUE)
+ 
+herm %>%
+ filter(nTC != 0) %>%
+  lm(formula = h2_total ~  nTC) %>%
+  summary()
 
 herm %>%
-  filter(Type != "Non-significant") %>%
-  glm(h2_total ~ Type, family = "binomial", .) %>%
+  filter(nTC != 0) %>%
+  lm(formula = h2_SNPs ~  nTC) %>%
   summary()
-# Call:
-#   glm(formula = h2_total ~ Type, family = "binomial", data = .)
-# Deviance Residuals:
-#   Min        1Q    Median        3Q       Max
-# -1.23705  -0.34753  -0.01448   0.34700   1.22204
-# 
-# Coefficients:
-#   Estimate Std. Error z value Pr(>|z|)
-# (Intercept) -0.29345    0.01797  -16.33   <2e-16 ***
-#   TypeMulti    0.43261    0.02955   14.64   <2e-16 ***
-#   
-herm %>%
-  filter(Type != "Non-significant") %>%
-  glm(h2_SNPs ~ Type, family = "binomial", .) %>%
-  summary()
-# Call:
-#   glm(formula = h2_total ~ Type, family = "binomial", data = .)
-# Deviance Residuals:
-#   Min        1Q    Median        3Q       Max
-# -1.23705  -0.34753  -0.01448   0.34700   1.22204
-# 
-# Coefficients:
-#   Estimate Std. Error z value Pr(>|z|)
-# (Intercept) -0.29345    0.01797  -16.33   <2e-16 ***
-# TypeMulti    0.55589    0.03461   16.06   <2e-16 ***
-  
+
+
 ## Common mQTLs between ARIES and HELIX ####
 load("results/eQTLanalysis/comQTLs.Rdata")
 mQTLs <- read.table("data/ARIES_mQTLs.tab", header = TRUE, as.is = TRUE)
@@ -186,6 +146,17 @@ ORs <- sapply(c("1", "2", "3", "4+"), function(x){
   c(OR = OR, p = p)
   
 })
+tmp <- meQTLTab2 %>%
+  mutate(cat = ifelse(nCat %in% c("0", "1"), nCat, "2+")) %>%
+  filter(cat != "1") %>%
+  group_by(cat) %>%
+  summarize(mQTLin = sum(mQTLin),
+            mQTLOut = sum(mQTLOut))
+x2 <- data.matrix(tmp[, 3:2])
+OR <- x2[1]/x2[2]/x2[3]*x2[4]
+p <- chisq.test(x2)$p.value
+
+
 meQTL_p <- ORs %>% 
   t() %>%
   data.frame() %>%
@@ -247,7 +218,7 @@ meQTL_p <- CpGsNum %>%
   summarize(prop = mean(mQTL)*100) %>%
   ggplot(aes(x = nCat, y = prop)) +
   geom_bar(position = "dodge", stat = "identity") +
-  scale_x_discrete(name = "TCs associated with a CpG") +
+  scale_x_discrete(name = "Number of TCs associated with a CpG") +
   scale_y_continuous(name = "CpGs with meQTL (%)") +
   theme_bw() +
   theme(legend.position = "none")

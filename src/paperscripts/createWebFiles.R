@@ -72,17 +72,17 @@ mainFeats <- featsU %>%
 ### Add required columns
 mainAll <- modU %>%
   select(-starts_with("CI")) %>%
-  mutate(log2FC = FC, SE = SD) %>%
+  mutate(log2FC = FC/10, SE = SD) %>%
   select(CpG, TC, log2FC, SE, p.value, sigPair) %>%
   left_join(methyAnnotGood, by = "CpG") %>%
   left_join(mainFeats, by = "CpG") %>%
   left_join(gexpAnnotGood, by = "TC")
 
-write.table(mainAll, file = "webFiles/eQTM_autosome_unadj.cells.txt", col.names = TRUE,
+write.table(mainAll, file = "HELIX_blood_eQTM_WebCat/eQTM_autosome_unadj.cells.txt", col.names = TRUE,
             quote = FALSE, row.names = FALSE)
 
 maineQTM <- subset(mainAll, sigPair == TRUE)
-write.table(maineQTM, file = "webFiles/eQTM_autosome_unadj.cells_SIG.txt", col.names = TRUE,
+write.table(maineQTM, file = "HELIX_blood_eQTM_WebCat/eQTM_autosome_unadj.cells_SIG.txt", col.names = TRUE,
             quote = FALSE, row.names = FALSE)
 
 
@@ -97,17 +97,17 @@ cellFeats <- featsC %>%
 ### Add required columns
 cellAll <- modC %>%
   select(-starts_with("CI")) %>%
-  mutate(log2FC = FC, SE = SD) %>%
+  mutate(log2FC = FC/10, SE = SD) %>%
   select(CpG, TC, log2FC, SE, p.value, sigPair) %>%
   left_join(methyAnnotGood, by = "CpG") %>%
   left_join(cellFeats, by = "CpG") %>%
   left_join(gexpAnnotGood, by = "TC")
 
-write.table(cellAll, file = "webFiles/eQTM_autosome_adj.cells.txt", col.names = TRUE,
+write.table(cellAll, file = "HELIX_blood_eQTM_WebCat/eQTM_autosome_adj.cells.txt", col.names = TRUE,
             quote = FALSE, row.names = FALSE)
 
 celleQTM <- subset(cellAll, sigPair == TRUE)
-write.table(celleQTM, file = "webFiles/eQTM_autosome_adj.cells_SIG.txt", col.names = TRUE,
+write.table(celleQTM, file = "HELIX_blood_eQTM_WebCat/eQTM_autosome_adj.cells_SIG.txt", col.names = TRUE,
             quote = FALSE, row.names = FALSE)
 
 
@@ -134,21 +134,24 @@ sigDf <- filter(modU, sigPair)
 
 mergedDf <- rbind(comCisQTL, comTransQTL) %>%
   mutate(CpG = gene) %>%
-  semi_join(comMQTLs.f, by = c("SNP", "gene")) %>%
+  left_join(select(comMQTLs.f, SNP, gene, A1, A2, freq), by = c("SNP", "gene")) %>%
   inner_join(sigDf, by = "CpG") %>%
   inner_join(eQTL, by = c("snps", "TC")) %>%
   dplyr::select(-sigPair) %>%
   filter(sign(beta.x)*sign(FC) == sign(beta.y))
 
 snpTab <- mergedDf %>%
-  mutate(SNP_CpG_beta = beta.x,
+  mutate(SNP_CpG_beta = beta.x/10,
          SNP_CpG_p.value = pvalue.x,
          SNP_TC_log2FC = beta.y,
          SNP_TC_p.value = pvalue.y,
-         CpG_TC_log2FC = FC,
-         CpG_TC_p.value = p.value) %>%
-  select(SNP, CpG, TC, SNP_CpG_beta, SNP_CpG_p.value,
+         CpG_TC_log2FC = FC/10,
+         CpG_TC_p.value = p.value,
+         EA = A1,
+         NEA = A2,
+         EF = freq) %>%
+  select(SNP, CpG, TC, EA, NEA, EF, SNP_CpG_beta, SNP_CpG_p.value,
          SNP_TC_log2FC, SNP_TC_p.value, CpG_TC_log2FC,
          CpG_TC_p.value)
-write.table(snpTab, file = "webFiles/eQTM_SNPs_autosome_unadj.cells.txt", col.names = TRUE,
+write.table(snpTab, file = "HELIX_blood_eQTM_WebCat/eQTM_SNPs_autosome_unadj.cells.txt", col.names = TRUE,
             quote = FALSE, row.names = FALSE)

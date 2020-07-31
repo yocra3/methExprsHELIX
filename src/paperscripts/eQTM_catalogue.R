@@ -23,6 +23,7 @@ library(FlowSorted.Blood.450k)
 library(GenomicRanges)
 library(BSgenome.Hsapiens.UCSC.hg19)
 library(limma)
+library(eulerr)
 
 ## Load datasets ####
 load("results/preprocessFiles/allOverlaps.Rdata")
@@ -162,13 +163,13 @@ t[1]/t[2]/t[3]*t[4]
 
 png("paper/CpGVar_eQTMs.png", width = 2000, height = 1000, res = 300)
 featsU_var %>%
-  mutate(sigVar = ifelse(sig == "random", "CpG not in eQTMs", "CpG in eQTMs")) %>%
+  mutate(sigVar = ifelse(sig == "random", "CpGs not in eQTMs", "CpGs in eQTMs")) %>%
   ggplot(aes(x = sigVar, y = meth_range, fill = sigVar)) + 
   geom_boxplot() +
   theme_bw() +
   scale_x_discrete(name = "") +
   theme(legend.position = "none") +
-  scale_y_continuous(name = "CpG variability") +
+  scale_y_continuous(name = "Methylation range") +
   scale_fill_manual(values = c("#999999", "#FFFFFF"))
 dev.off()
 
@@ -177,7 +178,7 @@ dev.off()
 ### TC call rate
 int_TC <- expAnnot %>%
   dplyr::select(probeset_id, Expressed, CallRate) %>%
-  mutate(sig = ifelse(probeset_id %in% sigTCs, "TCs in eQTMs", "TCs without eQTMs"))
+  mutate(sig = ifelse(probeset_id %in% sigTCs, "TCs in eQTMs", "TCs not in eQTMs"))
 table(int_TC$CallRate < 90, int_TC$sig)
 # TCs in eQTMs TCs without eQTM
 # FALSE       8584        19317
@@ -270,18 +271,6 @@ modU_comp %>%
             h = quantile(Distance, 0.75))
 
 ## Distance per direction
-dist_dir <- modU_comp %>%
-  filter(sigPair) %>%
-  mutate(Direction = ifelse(FC > 0, "Positive", "Inverse")) %>%
-  ggplot(aes(x = Distance, color = Direction)) + geom_density() + 
-  theme_bw() + 
-  scale_color_manual(name = "", values = c("#000000", "#009E73")) +
-  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
-                     labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
-  scale_y_continuous(name = "") + 
-  ggtitle("CpG-TC Distance (significant pairs)") + 
-  theme(plot.title = element_text(hjust = 0.5))
-
 modU_comp %>% 
   filter(sigPair) %>%
   mutate(Direction = ifelse(FC > 0, "Positive", "Inverse")) %>%
@@ -299,15 +288,15 @@ dev.off()
 ## Distance per direction + eQTM 
 png("paper/distance_distr.png", width = 2000, height = 1300, res = 300)
 modU_comp %>%
-  mutate(Direction = ifelse(!sigPair, "non-eQTM", ifelse(FC > 0, "Positive", "Inverse")),
-         Direction = factor(Direction, levels = c("Inverse", "Positive", "non-eQTM"))) %>%
+  mutate(Direction = ifelse(!sigPair, "Non-eQTM", ifelse(FC > 0, "Positive", "Inverse")),
+         Direction = factor(Direction, levels = c("Inverse", "Positive", "Non-eQTM"))) %>%
   ggplot(aes(x = Distance, color = Direction)) + geom_density() + 
   theme_bw() + 
-  scale_color_manual(name = "", values = c("#E69F00", "#009E73", "#000000")) +
-  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
+  scale_color_manual(name = "eQTM type", values = c("#E69F00", "#009E73", "#000000")) +
+  scale_x_continuous(name = "CpG-TC TSS distance", 
+                     breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
-  scale_y_continuous(name = "") + 
-  ggtitle("CpG-TC Distance") + 
+  scale_y_continuous(name = "Density") + 
   theme(plot.title = element_text(hjust = 0.5))
 dev.off()
 
@@ -521,13 +510,13 @@ modU_comp %>%
   ggplot(aes(x = Distance, y = FC/10, color = Direction)) + 
   geom_point(alpha = 0.1) + 
   theme_bw() + 
-  scale_color_manual(name = "", 
+  scale_color_manual(name = "eQTM type", 
                      breaks = c("Inverse", "Positive"),
                      values = c("#E69F00", "#009E73")) +
-  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
+  scale_x_continuous(name = "CpG-TC TSS distance",
+                     breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
   scale_y_continuous(name = "log2 FC/0.1 Methylation") + 
-  ggtitle("CpG-TC distance vs effect size") + 
   theme(plot.title = element_text(hjust = 0.5))
 dev.off()
 
@@ -643,7 +632,13 @@ names(gpos) <- gpos
 
 ORs <- lapply(gpos, function(x) {
   t <- table(modU_gene_pairs$Gene_Group %in% x, modU_gene_pairs$sigPair)
-  list(p.value = chisq.test(t)$p.value, OR = t[1]/t[2]/t[3]*t[4])
+  p.val = chisq.test(t)$p.value
+  or <-  t[1]/t[2]/t[3]*t[4]
+  ORl <- log(or)
+  SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2])
+  c(OR = or, p.val = p.val, ORm = exp(ORl - 1.96*SEl), 
+    ORM = exp(ORl + 1.96*SEl))
+  
   }) %>%
   Reduce(f = cbind)
 colnames(ORs) <- gpos  
@@ -657,6 +652,59 @@ ORs2 <- lapply(gpos, function(x) {
   Reduce(f = cbind)
 colnames(ORs2) <- gpos  
 
+
+ORsInv <- lapply(gpos, function(x) {
+  cot <- filter(modU_gene_pairs, modU_gene_pairs$sigPair == FALSE | FC < 0)
+  t <- table(cot$Gene_Group %in% x, cot$sigPair)
+  p.val = chisq.test(t)$p.value
+  or <-  t[1]/t[2]/t[3]*t[4]
+  ORl <- log(or)
+  SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2])
+  c(OR = or, p.val = p.val, ORm = exp(ORl - 1.96*SEl), 
+    ORM = exp(ORl + 1.96*SEl))
+}) %>%
+  Reduce(f = cbind)
+colnames(ORsInv) <- gpos  
+
+ORsPos <- lapply(gpos, function(x) {
+  cot <- filter(modU_gene_pairs, modU_gene_pairs$sigPair == FALSE | FC > 0)
+  t <- table(cot$Gene_Group %in% x, cot$sigPair)
+  p.val = chisq.test(t)$p.value
+  or <-  t[1]/t[2]/t[3]*t[4]
+  ORl <- log(or)
+  SEl <- sqrt(1/t[1, 1] + 1/t[1, 2] + 1/t[2, 1] + 1/t[2, 2])
+  c(OR = or, p.val = p.val, ORm = exp(ORl - 1.96*SEl), 
+    ORM = exp(ORl + 1.96*SEl))
+}) %>%
+  Reduce(f = cbind)
+colnames(ORsPos) <- gpos  
+
+convertORmat <- function(OR){
+  OR %>%
+    data.frame() %>%
+    mutate(vars = c("OR", "p-value", "ORm", "ORM")) %>%
+    gather(Region, value, 1:6) %>%
+    mutate(Region = gsub("X", "", Region),
+           Region = gsub(".", "'", Region, fixed = TRUE))
+  
+}
+
+png("paper/CpGEnrichGenePosition.png", width = 3000, height = 2000, res = 300)
+rbind(convertORmat(ORs) %>% mutate(type = "All eQTMs"),
+      convertORmat(ORsInv) %>% mutate(type = "Inverse"),
+      convertORmat(ORsPos) %>% mutate(type = "Positive")) %>%
+  spread(vars, value) %>%
+  mutate(Region = factor(Region, levels = gpos)) %>%
+  ggplot(aes(x = type, y = OR, fill = Region)) + 
+  geom_bar(stat = "identity", position=position_dodge()) + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORm, ymax = ORM)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "eQTM type") +
+  scale_fill_discrete(name = "Gene relative position") +
+  theme_bw() 
+dev.off()
 
 # Compare models ####
 sigDf2 <- modC %>%
@@ -774,46 +822,12 @@ write.table(modCompDF2[1:5, c(1:4, 6, 5, 7)], sep = "\t",
             file = "paper/ModelsStatisticComparisonCpG.txt",
             row.names = FALSE, quote = FALSE)
 
-parPlot <- CpGsSum %>%
-  left_join(select(CpGsSum2, CpG, Combined), by = "CpG") %>%
-  group_by(Combined.x, Combined.y) %>%
-  summarize(n = n()) %>%
-  filter(!(Combined.x == "Non-significant" & Combined.y == "Non-significant")) %>%
-  ungroup() %>%
-  mutate(Combined.x = factor(Combined.x, 
-                             levels = c("Mono_Inverse", "Mono_Positive", "Multi_Inverse", 
-                                        "Multi_Positive", "Multi_Both", "Non-significant")),
-         Combined.y = factor(Combined.y, 
-                             levels = c("Mono_Inverse", "Mono_Positive", "Multi_Inverse", 
-                                        "Multi_Positive", "Multi_Both", "Non-significant"))) %>%
-  gather_set_data(1:2) %>%
-  ggplot(aes(x, id = id, split = y, value = n)) +
-    geom_parallel_sets(aes(fill = Combined.y), alpha = 0.6, axis.width = 0.4) +
-    geom_parallel_sets_axes(axis.width = 0.4, fill = "gray95",
-                            color = "gray80") +
-    geom_parallel_sets_labels(colour = 'gray35', size = 4.5, angle = 0, fontface = "bold") +
-  scale_x_discrete(labels = c("Adjusted", "Cell Adjusted")) +
-  theme_minimal() +
-  theme(
-    legend.position = "none",
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.text.y = element_blank(),
-    axis.text.x = element_text(size = 20, face = "bold"),
-    axis.title.x  = element_blank()
-  )
-
-png("paper/CompModelsCpGs.png", width = 2500, height = 2500, res = 300)
-parPlot
-dev.off()
-
-
 ### Merge dataset ####
 mergeTB <- modU %>%
   left_join(modC, by = c("CpG", "TC")) %>%
   as_tibble() %>%
   filter(sigPair.x == TRUE | sigPair.y == TRUE) %>%
-  mutate(sigType = ifelse(sigPair.x == TRUE, ifelse(sigPair.y == TRUE, "Shared", "Main"), "Cell"))
+  mutate(sigType = ifelse(sigPair.x == TRUE, ifelse(sigPair.y == TRUE, "Model-shared", "Unadj. cell-specific"), "Adj. cell-specific"))
 
 
 t <- mergeTB %>%
@@ -882,12 +896,12 @@ plot_grid(CpG_plot2, TC_plot2, labels = "AUTO", ncol = 2)
 dev.off()
 
 pvals_comp <- mergeTB %>%
-  mutate(sigType = factor(sigType, levels = c("Shared", "Main", "Cell"))) %>%
+  mutate(sigType = factor(sigType, levels = c("Model-shared", "Unadj. cell-specific", "Adj. cell-specific"))) %>%
   ggplot(aes(x = -log10(p.value.y), y = -log10(p.value.x), col = sigType)) +
   geom_point() +
   scale_x_continuous(name = "Cell adjusted") + 
   scale_y_continuous("Main model") + 
-  ggtitle("-log10 p-values comparative") +
+  ggtitle("Comparison of -log10 p-values") +
   theme_bw() + 
   theme(plot.title = element_text(hjust = 0.5),
         legend.position = "none") +
@@ -904,33 +918,19 @@ png("paper/dist_distr_main_eQTMs.png", width = 1700, height = 800, res = 300)
 mergeTB %>%
   filter(sigPair.x) %>%
   inner_join(overDF, by = c("TC", "CpG")) %>%
-  mutate(sigType = factor(sigType, levels = c("Shared", "Main"))) %>%
+  mutate(sigType = factor(sigType, levels = c("Model-shared", "Unadj. cell-specific"))) %>%
   ggplot(aes(x = Distance, color = sigType)) +
   geom_density() +
   theme_bw() +
-  scale_color_manual(name = "", values = c("#85C0F9", "#F5793A")) +
-  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
+  scale_color_manual(name = "eQTM type", values = c("#85C0F9", "#F5793A")) +
+  scale_x_continuous(name = "CpG-TC TSS distance", 
+                     breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
-  scale_y_continuous(name = "") + 
-  ggtitle("CpG-TC Distance") + 
+  scale_y_continuous(name = "Density") + 
   theme(plot.title = element_text(hjust = 0.5))
 dev.off()
 
-png("paper/dist_distr_cell.png", width = 2500, height = 1500, res = 300)
-rbind(mutate(sigDf, mod = "Main"), 
-                    mutate(sigDf2, mod = "Cell")) %>%
-  inner_join(overDF, by = c("TC", "CpG")) %>%
-  ggplot(aes(x = Distance, color = mod)) +
-  geom_density() +
-  theme_bw() +
-  scale_color_manual(name = "Model", labels = c("Main", "Cell"), 
-                    values = c("#E69F00", "#0072B2")) +
-  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
-                     labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
-  scale_y_continuous(name = "") + 
-  ggtitle("CpG-TC Distance") + 
-  theme(plot.title = element_text(hjust = 0.5))
-dev.off()
+
 
 mergeTB %>%
   filter(sigPair.x) %>%
@@ -941,44 +941,23 @@ mergeTB %>%
             l = quantile(Distance, 0.25), 
             h = quantile(Distance, 0.75))
 
-# mergeTB <- mergeTB %>%
-#   mutate(Diff.pval = pnorm(abs(FC.x - FC.y)/sqrt(SD.x**2 + SD.y**2), lower.tail = FALSE), 
-#          isDiff = ifelse(Diff.pval < 0.05, "Different", "Equal"))
-## Compare estimates
-top <- filter(mergeTB, sigType == "Common") %>%
-  ggplot(aes(x = FC.y/10, y = FC.x/10)) +
-  geom_abline(slope = 1, linetype = "dashed") +
-  geom_point(color = "#0072B2") +
-  scale_x_continuous(name = "Cell adjusted") + 
-  scale_y_continuous("Main model") + 
-  ggtitle("Common") +
-  theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
-  scale_color_discrete(name = "") +
-  geom_smooth(method = "lm")
 
-bottom <- filter(mergeTB, sigType != "Common") %>%
-  ggplot(aes(x = FC.y/10, y = FC.x/10, col = sigType)) +
-  geom_point() +
-  geom_abline(slope = 1, linetype = "dashed") +
-  scale_x_continuous(name = "Cell adjusted") + 
-  scale_y_continuous("Main model") + 
- # ggtitle("Estimates comparative") +
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "none") +
-  scale_color_manual(name = "", values = c("#999999", "#E69F00")) +
-  facet_wrap(. ~ sigType) +
-  geom_smooth(method = "lm") 
+tmp <- mergeTB %>%
+  filter(sigPair.x) %>%
+  inner_join(overDF, by = c("TC", "CpG")) %>%
+  mutate(mod = ifelse(sigType == "Both", "Common", sigType))
+  ks.test(subset(tmp, mod == "Shared")$Distance,
+              subset(tmp, mod == "Main")$Distance)
 
 
 estim_comp <- mergeTB %>% 
-  mutate(sigType = factor(sigType, levels = c("Shared", "Main", "Cell"))) %>%
+  mutate(sigType = factor(sigType, levels = c("Model-shared", "Unadj. cell-specific", "Adj. cell-specific"))) %>%
   ggplot(aes(x = FC.y/10, y = FC.x/10, col = sigType)) +
   geom_point() +
   geom_abline(slope = 1, linetype = "dashed") +
   scale_x_continuous(name = "Cell adjusted") + 
   scale_y_continuous("Main model") + 
-  ggtitle("Estimates comparative") +
+  ggtitle("Comparison of effect size stimates") +
   theme_bw() + 
   theme(plot.title = element_text(hjust = 0.5),
         legend.position = "none") +
@@ -991,14 +970,36 @@ png("paper/CompModelsEstimatesPvals.png", width = 2500, height = 2000, res = 300
 plot_grid(estim_comp, pvals_comp, nrow = 2, labels = c("A", "B"))
 dev.off()
 
-png("paper/CompModelsEstimates.png", width = 2500, height = 2500, res = 300)
-plot_grid(top, bottom, nrow = 2)
-dev.off()
-
 filter(mergeTB, sigType == "Main") %>% lm(FC.y ~ FC.x, .) %>% summary()
 filter(mergeTB, sigType == "Cell") %>% lm(FC.y ~ FC.x, .) %>% summary()
 filter(mergeTB, sigType == "Both") %>% lm(FC.y ~ FC.x, .) %>% summary()
 
+## Compare assocations strength ####
+### FC
+mergeTB %>%
+  filter(sigPair.x) %>%
+  group_by(sigType) %>%
+  summarize(m = median(abs(FC.x)/10))
+
+wilcox.test(abs(subset(mergeTB, sigPair.x & sigType == "Shared")$FC.x)/10,
+        abs(subset(mergeTB, sigPair.x & sigType == "Unadj. Cell")$FC.x)/10, conf.int = TRUE)
+
+mergeTB %>%
+  filter(sigPair.x) %>%
+  group_by(sigType) %>%
+  summarize(m = median(SD.x))
+
+wilcox.test(subset(mergeTB, sigPair.x & sigType == "Shared")$SD.x,
+        subset(mergeTB, sigPair.x & sigType == "Unadj. Cell")$SD.x, conf.int = TRUE)
+
+
+mergeTB %>%
+  filter(sigPair.x) %>%
+  group_by(sigType) %>%
+  summarize(m = median(-log10(p.value.x)))
+
+wilcox.test(-log10(subset(mergeTB, sigPair.x & sigType == "Shared")$p.value.x),
+            -log10(subset(mergeTB, sigPair.x & sigType == "Unadj. Cell")$p.value.x), conf.int = TRUE)
 
 ## Run enrichment on CpGs ####
 mainCpGs <- setdiff(adjList$CpG, cellList$CpG)
@@ -1007,7 +1008,7 @@ comCpGs <- intersect(adjList$CpG, cellList$CpG)
 methyAnnot %>% 
   filter(CpG %in% c(mainCpGs, comCpGs)) %>%
   mutate(GeneRel = ifelse(UCSC_RefGene_Name == "", "Intergenic", "Genic"),
-         Type = ifelse(CpG %in% mainCpGs, "Main", "Common")) %>%
+         Type = ifelse(CpG %in% mainCpGs, "Unadj. Cell", "Shared")) %>%
   dplyr::select(GeneRel, Type) %>%
   table()
 
@@ -1034,7 +1035,7 @@ sum2 <- function(x) sum(!x)
 methChromSt <- as_tibble(methyAnnot) %>%
   mutate(CpG = Name) %>%
   select(CpG, eval(chromStates)) %>%
-  mutate(Type = ifelse(CpG %in% mainCpGs, "Main", ifelse(CpG %in% comCpGs, "Shared", "non-eQTMs"))) %>%
+  mutate(Type = ifelse(CpG %in% mainCpGs, "CpGs in unadj. cell-specific eQTMs", ifelse(CpG %in% comCpGs, "CpGs in model-shared eQTMs", "CpGs not in eQTMs"))) %>%
   group_by(Type) %>%
   summarize_at(chromStates, list(sum = sum, sum2 = sum2, prop = mean))
 
@@ -1043,7 +1044,7 @@ chromSt_modComp_prop_plot <- methChromSt %>%
   select(Type, ends_with("prop")) %>%
   gather(categories, proportion, 2:(2+length(chromStates) - 1)) %>%
   ungroup() %>%
-  mutate(Type = factor(Type,  levels = c("non-eQTMs", "Shared", "Main")),
+  mutate(Type = factor(Type,  levels = c("CpGs not in eQTMs", "CpGs in model-shared eQTMs", "CpGs in unadj. cell-specific eQTMs")),
          categories = gsub("_prop", "", categories),
          Group = factor(ifelse(categories %in% c("TssA", "TssAFlnk"), "TssProxProm",
                                ifelse(categories %in% c("Tx", "TxWk"), "ActTrans", 
@@ -1058,20 +1059,20 @@ chromSt_modComp_prop_plot <- methChromSt %>%
          ),
          categories = factor(categories, levels = chromStates)) %>%
   ggplot(aes(x = categories, y = proportion*100, fill = Type)) +
-  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
   scale_x_discrete(name = "ROADMAP chromatin states") +
   facet_wrap(~ Group, scales = "free_x") +  
   scale_y_continuous(name = "Proportion of CpGs (%)") +
-  scale_fill_manual(name = "CpG Type", values = c("#000000", "#85C0F9", "#F5793A")) +
+  scale_fill_manual(name = "CpG type", values = c("#FFFFFF", "#85C0F9", "#F5793A")) +
   theme_bw()
 
 png("paper/chromStatesProp_model.png", width = 2500, height = 2000, res = 300)
 chromSt_modComp_prop_plot
 dev.off()
 
-chromSt_enrich_compMods <- lapply(c("Common", "Main"), function(t){
+chromSt_enrich_compMods <- lapply(c("CpGs in model-shared eQTMs", "CpGs in unadj. cell-specific eQTMs"), function(t){
   rbind(filter(methChromSt, Type == t),
-        filter(methChromSt, Type == "non-eQTMs")) %>%
+        filter(methChromSt, Type == "CpGs not in eQTMs")) %>%
     select(ends_with("sum"), ends_with("sum2")) %>%
     g(chromStates, cols = c("_sum", "_sum2")) %>%
     as_tibble() %>%
@@ -1082,18 +1083,7 @@ chromSt_enrich_compMods <- lapply(c("Common", "Main"), function(t){
 chromSt_enrich_compMods <- Reduce(rbind, chromSt_enrich_compMods)
 
 
-
-chrom_model <- as_tibble(methyAnnot) %>%
-  filter(CpG %in% c(mainCpGs, comCpGs)) %>%
-  mutate(Type = ifelse(CpG %in% mainCpGs, "Main", "Common")) %>%
-  select(Type, eval(chromStates)) %>%
-  group_by(Type) %>%
-  summarize_at(chromStates, list(sum = sum, sum2 = sum2)) %>%
-  arrange(desc(Type)) %>%
-  g(chromStates, cols = c("_sum", "_sum2")) %>%
-  as_tibble() %>%
-  mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
-  gather("Region", "Value", 1:15) %>%
+chrom_model <- chromSt_enrich_compMods %>%
   spread(par, Value) %>%
   mutate(Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
                                ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
@@ -1105,28 +1095,23 @@ chrom_model <- as_tibble(methyAnnot) %>%
                                )
   ), 
   levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
-  )
+  ),
   ) %>%
-  ggplot(aes(x = Region, y = OR)) + 
-  geom_bar(stat = "identity", position=position_dodge(), 
-           fill = "#E69F00") + 
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
+  geom_bar(stat = "identity", position=position_dodge(), color = "black") + 
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "ROADMAP chromatin states") +
+  scale_fill_manual(name = "CpG type", values = c("#85C0F9", "#F5793A")) +
   facet_wrap(~ Group, scales = "free_x") +
   theme_bw() +
-  ggtitle("Enrichment main vs common eQTMs") + 
   theme(plot.title = element_text(hjust = 0.5))
-
-
 
 png("paper/enrich_chromStates_model.png", width = 2500, height = 1500, res = 300)
 chrom_model
 dev.off()
-
-
 
 methyAnnot %>% 
   filter(CpG %in% c(mainCpGs, comCpGs)) %>%
@@ -1236,11 +1221,10 @@ data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, comCpGs), "Fstat"]
 # (163 observations deleted due to missingness)
 # Multiple R-squared:  0.09279,   Adjusted R-squared:  0.09276
 # F-statistic:  3586 on 1 and 35063 DF,  p-value: < 2.2e-16
-
 png("paper/CompModelsCpGCellSpecific.png", width = 1500, height = 1000, res = 300)
 methCell_compMods <- data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(adjCpGs, comCpGs), "Fstat"],
-           Type = factor(rep(c("Main", "Shared"), c(length(adjCpGs), length(comCpGs))),
-                         levels = c("Shared", "Main"))) %>%
+           Type = factor(rep(c("CpGs in unadj. cell-specific eQTMs", "CpGs in model-shared eQTMs"), c(length(adjCpGs), length(comCpGs))),
+                         levels = c("CpGs in model-shared eQTMs", "CpGs in unadj. cell-specific eQTMs"))) %>%
   ggplot(aes(y = log10(Fstat), x = Type, fill = Type)) + 
   geom_boxplot() +
   theme_bw() +
@@ -1286,9 +1270,9 @@ comGenes.f <- setdiff(comGenes, mainGenes)
 ### Make results table
 bluep_res <- topTable(fit, n = Inf) %>% 
   mutate(gene = rownames(.),
-         cat = ifelse(gene %in% mainGenes.f, "Main", 
-                      ifelse(gene %in% comGenes.f, "Shared", "None")),
-         cat = factor(cat, levels = c("Shared", "Main"))) %>%
+         cat = ifelse(gene %in% mainGenes.f, "TCs in unadj. cell-specific eQTMs", 
+                      ifelse(gene %in% comGenes.f, "TCs in model-shared eQTMs", "None")),
+         cat = factor(cat, levels = c("TCs in model-shared eQTMs", "TCs in unadj. cell-specific eQTMs"))) %>%
   filter(cat != "None")
 
 summary(lm(formula = log10(F) ~ cat, data = bluep_res))
@@ -1308,8 +1292,8 @@ exprCell_compMods
 dev.off()
 
 
-png("paper/CompModelsCellSpecific.png", width = 2500, height = 1000, res = 300)
-plot_grid(methCell_compMods, exprCell_compMods, nrow = 1, labels = "AUTO")
+png("paper/CompModelsCellSpecific.png", width = 1500, height = 1500, res = 300)
+plot_grid(methCell_compMods, exprCell_compMods, ncol = 1, labels = "AUTO")
 dev.off()
 
 
@@ -1380,6 +1364,214 @@ c1 <- filter(spTrans, TC %in% tcs1 & P.Value < 1e-10)$CpG
 cpgs1 <- names(table(c1)[table(c1) == 5])
 filter(spTrans,  TC %in% tcs1 & CpG %in% cpgs1)
 
+## Age variability (MEDALL - Xu et al) ####
+agedf <- read.csv2("data/DiffMethyAgeCpGs.csv", as.is = TRUE)
+agedf <- agedf %>%
+  as_tibble() %>%
+  mutate(Dir = ifelse(as.numeric(beta8.avg) > as.numeric(beta0.avg), "Increased", "Decreased"), 
+         CpG = ILMNID)
+
+ageSum <- CpGsSum %>%
+  dplyr::select(CpG, Direction) %>%
+  mutate(Direction = factor(Direction, levels = c("Inverse", "Positive", "Both", "Non-significant"))) %>%
+  left_join(dplyr::select(agedf, Dir, CpG), by = "CpG") %>%
+  mutate(Dir = ifelse(is.na(Dir), "Constant", Dir)) %>%
+  group_by(Direction, Dir) %>%
+  summarize(n = n()) %>%
+  spread(Dir, n) %>%
+  ungroup() %>%
+  rbind(filter(., Direction != "Non-significant") %>% 
+          summarize_all(fsum)) %>%
+  mutate(Direction = as.character(Direction),
+         Direction = ifelse(is.na(Direction), "eQTM", Direction),
+         Variable = Decreased + Increased,
+         tot = Variable + Constant)
+
+ageG <- c("Variable", "Decreased", "Increased")
+
+
+typesAge <- lapply(types, function(t){
+  rbind(filter(ageSum, Direction == t),
+        filter(ageSum, Direction == "Non-significant")) %>%
+    g2(ageG) %>%
+    as_tibble() %>%
+    mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+    gather("Region", "Value", 1:3) %>%
+    mutate(Type = t)
+})
+combAge <- Reduce(rbind, typesAge)
+combAge$dataset <- "MeDALL"
+
+age_var <- combAge %>%
+  spread(par, Value) %>%
+  mutate(Type = ifelse(Type == "eQTM", "All", Type),
+         Type = factor(Type, levels = c("All", "Inverse", "Positive"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
+  geom_bar(stat = "identity", position=position_dodge(), color = "black") + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "Methylation during childhood", limits = ageG) +
+  scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("CpGs in eQTMs", "CpGs in inverse eQTMs", "CpGs in positive eQTMs")) +
+  theme_bw() 
+
+png("paper/CpGEnrichAge.png", width = 3000, height = 2000, res = 300)
+age_var
+dev.off()
+
+tmp <- CpGsSum %>%
+  dplyr::select(CpG, Direction) %>%
+  mutate(Direction = factor(Direction, levels = c("Inverse", "Positive", "Both", "Non-significant"))) %>%
+  left_join(dplyr::select(agedf, Dir, CpG), by = "CpG") %>%
+  mutate(Dir = ifelse(is.na(Dir), "Constant", Dir)) 
+
+png("paper/CpGEnrichAge_methLevels.png", width = 3000, height = 2000, res = 300)
+age_meth <-  as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, median) %>%
+  right_join(tmp, by = "CpG") %>%
+  mutate(Significant = ifelse(Direction == "Non-significant", "CpGs not in eQTMs", "CpGs in eQTMs")) %>%
+  ggplot(aes(x = Dir, y = median, fill = Significant)) +
+  geom_violin() +
+  scale_x_discrete(name = "Methylation during childhood") +
+  scale_y_continuous(name = "Median methylation") +
+  scale_fill_manual(name = "CpG type", values = c("#999999", "#FFFFFF")) +
+  theme_bw()
+age_meth
+dev.off()
+
+## Age variability (Mulder) ####
+epideltadf <- read.table("data/epidelta_2020-07-17.txt", as.is = TRUE)
+epideltadf$CpG <- rownames(epideltadf)
+epideltadf <- epideltadf %>%
+  as_tibble() %>%
+  mutate(Dir = ifelse(M1.change.p > 1e-7, "Constant",
+                      ifelse(M1.change.estimate > 0, "Increased", "Decreased")))
+
+age_cont_Sum <- CpGsSum %>%
+  dplyr::select(CpG, Direction) %>%
+  mutate(Direction = factor(Direction, levels = c("Inverse", "Positive", "Both", "Non-significant"))) %>%
+  left_join(dplyr::select(epideltadf, Dir, M1.change.estimate, CpG), by = "CpG") %>%
+  group_by(Direction, Dir) %>%
+  summarize(n = n()) %>%
+  spread(Dir, n) %>%
+  ungroup() %>%
+  rbind(filter(., Direction != "Non-significant") %>% 
+          summarize_all(fsum)) %>%
+  mutate(Direction = as.character(Direction),
+         Direction = ifelse(is.na(Direction), "eQTM", Direction),
+         Variable = Decreased + Increased,
+         tot = Variable + Constant)
+
+ageG <- c("Variable", "Decreased", "Increased")
+
+
+types_cont_Age <- lapply(types, function(t){
+  rbind(filter(age_cont_Sum, Direction == t),
+        filter(age_cont_Sum, Direction == "Non-significant")) %>%
+    g2(ageG) %>%
+    as_tibble() %>%
+    mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+    gather("Region", "Value", 1:3) %>%
+    mutate(Type = t)
+})
+comb_cont_Age <- Reduce(rbind, types_cont_Age)
+comb_cont_Age$dataset <- "Epidelta"
+
+
+png("paper/CpGEnrichAge_Mulder.png", width = 3000, height = 2000, res = 300)
+age_cont_var <- comb_cont_Age %>%
+  spread(par, Value) %>%
+  mutate(Type = ifelse(Type == "eQTM", "All", Type),
+         Type = factor(Type, levels = c("All", "Inverse", "Positive"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
+  geom_bar(stat = "identity", position=position_dodge(), color = "black") + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "Methylation during childhood", limits = ageG) +
+  scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("CpGs in eQTMs", "CpGs in inverse eQTMs", "CpGs in positive eQTMs")) +
+  theme_bw() 
+age_cont_var
+dev.off()
+
+
+tmp_cont <- CpGsSum %>%
+  dplyr::select(CpG, Direction) %>%
+  mutate(Direction = factor(Direction, levels = c("Inverse", "Positive", "Both", "Non-significant"))) %>%
+  left_join(dplyr::select(epideltadf, Dir, CpG), by = "CpG") %>%
+  mutate(Dir = ifelse(is.na(Dir), "Constant", Dir)) 
+
+age_meth <-  as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, median) %>%
+  right_join(tmp_cont, by = "CpG") %>%
+  mutate(Significant = ifelse(Direction == "Non-significant", "Non-eQTM", "eQTM")) %>%
+  ggplot(aes(x = Dir, y = median, fill = Significant)) +
+  geom_violin() +
+  scale_x_discrete(name = "Methylation during childhood") +
+  scale_y_continuous(name = "Median methylation") +
+  scale_fill_manual(name = "", values = c("#999999", "#FFFFFF")) +
+  theme_bw()
+
+png("paper/CpGEnrichAge_methLevels.png", width = 3000, height = 2000, res = 300)
+age_meth
+dev.off()
+
+## Make combined plot
+age_var_comb <- rbind(comb_cont_Age, combAge) %>%
+  mutate(dataset = factor(dataset, levels = c("MeDALL", "Epidelta"))) %>%
+  spread(par, Value) %>%
+  mutate(Type = ifelse(Type == "eQTM", "All", Type),
+         Type = factor(Type, levels = c("All", "Inverse", "Positive"))) %>%
+  ggplot(aes(x = Region, y = OR, fill = Type)) + 
+  geom_bar(stat = "identity", position=position_dodge(), color = "black") + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "Change in methylation", limits = ageG) +
+  scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("CpGs in eQTMs", "CpGs in inverse eQTMs", "CpGs in positive eQTMs")) +
+  theme_bw() +
+  facet_grid(~ dataset)
+
+## Overlap age variability datasets
+merged_age <- left_join(select(agedf, CpG, Dir), 
+                        select(epideltadf, CpG, Dir, M1.change.p), 
+                        by = "CpG")
+mean(merged_age$Dir.x == merged_age$Dir.y)     
+
+png("paper/CpGEnrich_ageVar_methLevels.png", width = 3000, height = 1500, res = 300)
+as_tibble(methyAnnot) %>%
+  mutate(CpG = Name) %>%
+  select(CpG, median) %>%
+  left_join(select(CpGsSum, CpG, Type)) %>%
+  mutate(Significant = ifelse(Type == "Non-significant", "CpGs not in eQTMs", "CpGs in eQTMs")) %>%
+  left_join(dplyr::select(agedf, Dir, CpG), by = "CpG") %>%
+  mutate(Xu = ifelse(is.na(Dir), "Constant", Dir))  %>%
+  select(-Dir) %>%
+  left_join(dplyr::select(epideltadf, Dir, CpG), by = "CpG") %>%
+  mutate(Epidelta = Dir) %>%
+  filter(!is.na(Significant) & !is.na(Epidelta)) %>%
+  select(Xu, Epidelta, CpG, median, Significant) %>%
+  gather(Database, Status, 1:2) %>%
+  mutate(Database = ifelse(Database == "Xu", "MeDALL", "Epidelta"),
+         Database = factor(Database, levels = c("MeDALL", "Epidelta"))) %>%
+  ggplot(aes(x = Status, y = median, fill = Significant)) +
+  geom_violin() +
+  scale_x_discrete(name = "Change in methylation") +
+  scale_y_continuous(name = "Median methylation") +
+  scale_fill_manual(name = "CpG type", values = c("#999999", "#FFFFFF")) +
+  facet_grid(~ Database) +
+  theme_bw()
+dev.off()
+
+
 
 
 ## Compare with other eQTM studies (Kennedy) PMID:  29914364 ####
@@ -1425,12 +1617,40 @@ monocytes.merge %>% group_by(sigType) %>% summarize(rFC = cor(FC, beta),
 monocytes.merge %>% group_by(sigType2) %>% summarize(rFC = cor(FC, beta), 
                                                  pFC = cor.test(FC, beta)$p.value,
                                                  signConc = mean(sign(FC) == sign(beta)))
-
 table(blood.merge$sigType)
 table(monocytes.merge$sigType)
 
 table(blood.merge$sigType2)
 table(monocytes.merge$sigType2)
+
+## Map one pair of HELIX (lowest p-value) to each pair in GTP and MESA
+blood.merge.uniq <- blood.merge %>% 
+  group_by(exp.Probe, CpG.probe) %>%
+  top_n(-1, p.value)
+
+monocytes.merge.uniq <- monocytes.merge %>% 
+  group_by(exp.Probe, CpG.probe) %>%
+  top_n(-1, p.value)
+
+
+blood.merge.uniq %>% group_by(sigType) %>% summarize(rFC = cor(FC, beta), 
+                                                pFC = cor.test(FC, beta)$p.value,
+                                                signConc = mean(sign(FC) == sign(beta)))
+blood.merge.uniq %>% group_by(sigType2) %>% summarize(rFC = cor(FC, beta), 
+                                                 pFC = cor.test(FC, beta)$p.value,
+                                                 signConc = mean(sign(FC) == sign(beta)))
+
+
+monocytes.merge.uniq %>% group_by(sigType) %>% summarize(rFC = cor(FC, beta), 
+                                                    pFC = cor.test(FC, beta)$p.value,
+                                                    signConc = mean(sign(FC) == sign(beta)))
+monocytes.merge.uniq %>% group_by(sigType2) %>% summarize(rFC = cor(FC, beta), 
+                                                     pFC = cor.test(FC, beta)$p.value,
+                                                     signConc = mean(sign(FC) == sign(beta)))
+table(blood.merge.uniq$sigType2)
+table(monocytes.merge.uniq$sigType2)
+
+
 
 #### Whole blood plots
 pWBFC <- blood.merge %>%
@@ -1495,50 +1715,10 @@ png("paper/ComparisonKennedyEQTM.png", width = 2500, height = 2000, res = 300)
 plot_grid(pWBFC, pWBpval, pMONFC, pMONpval, nrow = 2, ncol = 2, labels = c("A", "", "B", ""))
 dev.off()
 
-## Compare with cell adjusted model
-modC_Annot <- modC %>%
-  as_tibble() %>%
-  dplyr::select(CpG, TC, FC, p.value, sigPair) %>%
-  left_join(dplyr::select(expAnnot, TC, GeneSymbol_Affy), by = "TC") %>%
-  mutate(GeneAffy = strsplit(GeneSymbol_Affy, ";"))
-
-blood.cellmerge <- eQTM_blood.f %>%
-  mutate(CpG = CpG.probe, GeneSymbol_Affy = annot.gene) %>%
-  inner_join(modC_Annot, by = c("CpG", "GeneSymbol_Affy")) %>%
-  mutate(sigType = ifelse(sigPair, ifelse(p.val < 1e-11, "Both", "Cell"), 
-                          ifelse(p.val < 1e-11, "WholeBlood", "None")))
-
-monocytes.cellmerge <- eQTM_monocytes.f %>%
-  mutate(CpG = CpG.probe, GeneSymbol_Affy = annot.gene) %>%
-  inner_join(modC_Annot, by = c("CpG", "GeneSymbol_Affy")) %>%
-  mutate(sigType = ifelse(sigPair, ifelse(p.val < 1e-11, "Both", "Cell"), 
-                          ifelse(p.val < 1e-11, "Monocytes", "None")))
-
-cor(blood.cellmerge$FC, blood.cellmerge$beta )
-cor(monocytes.cellmerge$FC, monocytes.cellmerge$beta )
-
-table(blood.cellmerge$sigType)
-table(monocytes.cellmerge$sigType)
 
 
-monocytes.exclusive <- semi_join(monocytes.merge, blood.merge, by =  c("CpG", "GeneSymbol_Affy") )
-monocytes.cellexclusive <- semi_join(monocytes.cellmerge, blood.cellmerge, by =  c("CpG", "GeneSymbol_Affy") )
 
-table(monocytes.exclusive$sigType)
-table(monocytes.cellexclusive$sigType)
-
-monocytes.exclusive %>% group_by(sigType) %>% summarize(rFC = cor(FC, beta), 
-                                                            pFC = cor.test(FC, beta)$p.value,
-                                                            rPval = cor(-log10(p.val + 1e-228), -log10(p.value)), 
-                                                            pPval = cor.test(-log10(p.val + 1e-228), -log10(p.value))$p.value)
-
-monocytes.cellexclusive %>% group_by(sigType) %>% summarize(rFC = cor(FC, beta), 
-                                                    pFC = cor.test(FC, beta)$p.value,
-                                                    rPval = cor(-log10(p.val + 1e-228), -log10(p.value)), 
-                                                    pPval = cor.test(-log10(p.val + 1e-228), -log10(p.value))$p.value)
-
-
-## Comparison catalogue pairs in Kennedy
+## Comparison catalogue pairs in Kennedy ####
 monocytes.merge$pair <- paste(monocytes.merge$CpG, monocytes.merge$TC)
 blood.merge$pair <- paste(blood.merge$CpG, blood.merge$TC)
 modU_Annot$MESA <- ifelse(paste(modU_Annot$CpG, modU_Annot$TC) %in% monocytes.merge$pair, 
@@ -1548,6 +1728,13 @@ modU_Annot$GTP <- ifelse(paste(modU_Annot$CpG, modU_Annot$TC) %in% blood.merge$p
 modU_Annot$adults <- ifelse(modU_Annot$sigPair, 
                            ifelse(modU_Annot$MESA == "MESA" | modU_Annot$GTP == "GTP", "Shared", "Children"), 
                            "Other")
+
+modU_Annot %>% 
+  filter(adults != "Other") %>%
+  group_by(adults) %>%
+  summarize(nCpG = length(unique(CpG)),
+            nTC = length(unique(TC)))
+
 
 modU_Annot %>% filter(sigPair == TRUE) %>% group_by(GTP) %>% 
   summarize(m = median(-log10(p.value)))
@@ -1573,7 +1760,7 @@ modU_comp$adult <- ifelse(modU_comp$sigPair,
                            "Other")
 
 
-ks.test(abs(subset(modU_comp, sigPair & adult == "Shared")$FC)/10,
+wilcox.test(abs(subset(modU_comp, sigPair & adult == "Shared")$FC)/10,
         abs(subset(modU_comp, sigPair & adult == "Children")$FC)/10)
 
 modU_Annot %>% filter(sigPair == TRUE) %>% group_by(adult) %>% 
@@ -1587,23 +1774,306 @@ modU_comp %>% filter(sigPair == TRUE) %>% ggplot(aes(x = abs(FC), color = adult)
   geom_density() + scale_x_continuous(limits = c(0, 6))
 modU_comp %>% filter(sigPair == TRUE) %>% ggplot(aes(x = SD, color = adult)) +
   geom_density() + scale_x_continuous(limits = c(0, 3))
-ks.test(abs(subset(modU_comp, sigPair & adult == "Shared")$SD),
+wilcox.test(abs(subset(modU_comp, sigPair & adult == "Shared")$SD),
         abs(subset(modU_comp, sigPair & adult == "Children")$SD))
 
 
+wilcox.test(-log10(subset(modU_comp, sigPair & adult == "Shared")$p.value),
+            -log10(subset(modU_comp, sigPair & adult == "Children")$p.value))
+
+
 plot_all <- modU_comp %>% filter(sigPair == TRUE) %>% 
-  mutate(Type = ifelse(adult == "Children", "Children-specific", "Children and adult shared")) %>%
+  mutate(Type = ifelse(adult == "Children", "Child-specific", "Age-shared")) %>%
   ggplot(aes(x = Distance, color = Type)) +
   geom_density() +
   theme_bw() + 
-  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
+  scale_x_continuous(name = "CpG-TC TSS distance",
+                     breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
-  scale_y_continuous(name = "") + 
-  ggtitle("CpG-TC Distance eQTMs") +
-  scale_color_discrete(name = "") +
+  scale_y_continuous(name = "Density") + 
+  scale_color_discrete(name = "eQTM type") +
   theme(plot.title = element_text(hjust = 0.5))
 png("paper/distance_distr_Kennedy.png", width = 2000, height = 1000, res = 300)
 plot_all
 dev.off()
 
+modU_comp %>% filter(sigPair == TRUE) %>% 
+  mutate(Type = ifelse(adult == "Children", "Children-specific", "Children and adult shared")) %>%
+  group_by(Type) %>%
+  summarize(m = median(Distance),
+            q25 = quantile(Distance, 0.25),
+            q75 = quantile(Distance, 0.75))
+ks.test(subset(modU_comp, sigPair == TRUE & adult == "Children")$Distance,
+        subset(modU_comp, sigPair == TRUE & adult != "Children")$Distance) 
 
+### Plot overlap between datasets
+adult_db <- full_join(select(blood.merge.uniq, exp.Probe, CpG.probe, sigType2),
+                       select(monocytes.merge.uniq, exp.Probe, CpG.probe, sigType2),
+                       by = c("exp.Probe", "CpG.probe")) %>%
+  mutate(name = paste(exp.Probe, CpG.probe),
+         sigType2.x = ifelse(is.na(sigType2.x), "None", sigType2.x),
+         sigType2.y = ifelse(is.na(sigType2.y), "None", sigType2.y),
+         GTP = sigType2.x != "None",
+         MESA = sigType2.y != "None",
+         HELIX = sigType2.x == "Shared" | sigType2.y == "Shared")
+adult_over <- plot(euler(adult_db[, c("GTP", "MESA", "HELIX")], shape = "ellipse"), 
+           fills = list(fill = c("cyan", "darksalmon", "darkseagreen"), alpha = 0.5),
+     quantities = list(fontsize = 8), 
+     main = "Adult eQTMs in HELIX")
+
+
+
+helix_over <- modU_Annot %>% 
+  filter(sigPair == TRUE) %>%
+  mutate(HELIX = TRUE,
+         GTP = GTP == "GTP",
+         MESA = MESA == "MESA") %>%
+  select(GTP, MESA, HELIX) %>%
+  euler(shape = "ellipse") %>%
+  plot(fills = list(fill = c("cyan", "darksalmon", "darkseagreen"), alpha = 0.5),
+       quantities = list(fontsize = 8), 
+       main = "Helix eQTMs in adult cohorts")
+
+bottom <- plot_grid(adult_over, helix_over, labels = c("B", "C"))
+
+png("paper/AgeEffectPlot.png", width = 3000, height = 2000, res = 300)
+plot_grid(age_var_comb, bottom, ncol = 1, labels = c("A", ""))
+dev.off()
+
+## Compare with cell types  ####
+#### Prepare data in previous sections
+childCpGs <- unique(modU_Annot[modU_Annot$adults == "Children", ]$CpG)
+sharedCpGs <- unique(modU_Annot[modU_Annot$adults == "Shared", ]$CpG)
+
+length(intersect(childCpGs, sharedCpGs))
+length(setdiff(sharedCpGs, childCpGs))
+length(setdiff(childCpGs, sharedCpGs))
+
+childCpGs.f <- setdiff(childCpGs, sharedCpGs)
+sharedCpGs.f <- setdiff(sharedCpGs, childCpGs)
+
+data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(childCpGs, sharedCpGs), "Fstat"],
+           Type = rep(c("Children", "Shared"), c(length(childCpGs), length(sharedCpGs)))) %>%
+  lm(formula = log10(Fstat) ~ Type, data = .) %>%
+  summary()
+
+data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(childCpGs.f, sharedCpGs), "Fstat"],
+           Type = rep(c("Children", "Shared"), c(length(childCpGs.f), length(sharedCpGs)))) %>%
+  lm(formula = log10(Fstat) ~ Type, data = .) %>%
+  summary()
+
+
+methCell_child_adult <- data.frame(Fstat = FlowSorted.Blood.450k.compTable[c(childCpGs, sharedCpGs), "Fstat"],
+                                  Type = rep(c("CpGs in child-specific eQTMs", "CpGs in age-shared eQTMs"), c(length(childCpGs), length(sharedCpGs)))) %>%
+  ggplot(aes(y = log10(Fstat), x = Type, fill = Type)) + 
+  geom_boxplot() +
+  theme_bw() +
+  scale_x_discrete(name = "") +
+  ggtitle("Methylation cell-type specificity") + 
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none")
+
+## Select genes
+childTCs <- unique(modU_Annot[modU_Annot$adults == "Children", ]$TC)
+childGenes <- filter(expAnnot, probeset_id %in% childTCs)$GeneSymbol_Affy
+childGenes <- unique(unlist(strsplit(childGenes, ";")))
+
+sharedTCs <- unique(modU_Annot[modU_Annot$adults == "Shared", ]$TC)
+sharedGenes <- filter(expAnnot, probeset_id %in% sharedTCs)$GeneSymbol_Affy
+sharedGenes <- unique(unlist(strsplit(sharedGenes, ";")))
+
+length(intersect(sharedTCs, childTCs))
+length(setdiff(sharedTCs, childTCs))
+length(setdiff(childTCs, sharedTCs))
+
+## Remove genes regulated by different CpGs in both models
+childGenes.f <- setdiff(childGenes, sharedGenes)
+sharedGenes.f <- setdiff(sharedGenes, childGenes)
+
+### Make results table
+bluep_res_adult <- topTable(fit, n = Inf) %>% 
+  mutate(gene = rownames(.),
+         cat = ifelse(gene %in% childGenes, "TCs in child-specific eQTMs", 
+                      ifelse(gene %in% sharedGenes, "TCs in age-shared eQTMs", "None"))) %>%
+  filter(cat != "None")
+
+summary(lm(formula = log10(F) ~ cat, data = bluep_res_adult))
+
+exprCell_adults <- bluep_res_adult %>%
+  ggplot(aes(y = log10(F), x = cat, fill = cat)) + 
+  geom_boxplot() +
+  theme_bw() +
+  scale_x_discrete(name = "") +
+  scale_y_continuous("log10(Fstat)") +
+  ggtitle("Gene expression cell-type specificity") + 
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none")
+
+
+
+png("paper/CompModelsChildrenAdult.png", width = 1500, height = 1500, res = 300)
+plot_grid(methCell_child_adult, exprCell_adults, ncol = 1, labels = "AUTO")
+dev.off()
+
+
+## Compare with age variability ####
+### Epidelta
+epideltadf <- read.table("data/epidelta_2020-07-17.txt", as.is = TRUE)
+epideltadf$CpG <- rownames(epideltadf)
+ageVarCpG <- subset(epideltadf, M1.change.p < 1e-7)$CpG
+agevar_adult <-  data.frame(CpG = c(childCpGs, sharedCpGs), 
+                            eQTM = rep(c("Child-specific", "Child and adult shared"), 
+                                       c(length(childCpGs), length(sharedCpGs))),
+                            stringsAsFactors = FALSE) %>%
+  rbind(data.frame(CpG = filter(methyAnnot, !Name %in% .$CpG)$Name, 
+                   eQTM = "None")) %>%
+  mutate(Epidelta = ifelse(CpG %in% ageVarCpG, "Variable", "Constant")) %>%
+  group_by(eQTM) %>%
+  summarize(ageVarin = sum(Epidelta == "Variable"), ageVarout = sum(Epidelta == "Constant"))
+
+sharedAgevar <- getOR(2:3, agevar_adult[-2, ])
+childAgevar <- getOR(2:3, agevar_adult[-1, ])
+  
+### MeDALL
+agedf <- read.csv2("data/DiffMethyAgeCpGs.csv", as.is = TRUE)
+agedf <- agedf %>%
+  as_tibble() %>%
+  mutate(Dir = ifelse(as.numeric(beta8.avg) > as.numeric(beta0.avg), "Increased", "Decreased"), 
+         CpG = ILMNID)
+
+agevar_adult2 <-  data.frame(CpG = c(childCpGs, sharedCpGs), 
+                            eQTM = rep(c("Child-specific", "Child and adult shared"), 
+                                       c(length(childCpGs), length(sharedCpGs))),
+                            stringsAsFactors = FALSE) %>%
+  rbind(data.frame(CpG = filter(methyAnnot, !Name %in% .$CpG)$Name, 
+                   eQTM = "None")) %>%
+  mutate(Medall = ifelse(CpG %in% agedf$CpG, "Variable", "Constant")) %>%
+  group_by(eQTM) %>%
+  summarize(ageVarin = sum(Medall == "Variable"), ageVarout = sum(Medall == "Constant"))
+
+sharedAgevar2 <- getOR(2:3, agevar_adult2[-2, ])
+childAgevar2 <- getOR(2:3, agevar_adult2[-1, ])
+
+
+## Compare with meQTLs ####
+load("results/eQTLanalysis/comQTLs.Rdata") 
+mQTLs <- read.table("data/ARIES_mQTLs.tab", header = TRUE, as.is = TRUE)
+mQTLsH2 <- read.table("results/ARIES/mqtls.txt", header = TRUE, as.is = TRUE)
+
+ARIESannot <- read.table("data/ariesmqtlsnps.bim", as.is = TRUE)
+colnames(ARIESannot) <- c("chr", "SNP", "cm", "pos", "Ref", "Alt")
+
+HELIXannot <- read.table("~/data/WS_HELIX/HELIX_preproc/gwas/Final_data_HRCimp_QC2/HELIX.impQC.rs.bim", as.is = TRUE)
+colnames(HELIXannot) <- c("chr", "SNP", "cm", "pos", "Ref", "Alt")
+
+comMQTLs <- mQTLsH2 %>%
+  mutate(gene = CpG) %>%
+  dplyr::select(SNP, gene, A1, A2, freq, b, se, p, N, r2) %>%
+  semi_join(rbind(comCisQTL, comTransQTL), by = c("SNP", "gene")) %>%
+  inner_join(left_join(mQTLs, dplyr::select(ARIESannot, SNP, Ref, Alt), by = "SNP"), 
+             by = c("SNP", "gene")) %>%
+  as_tibble()
+
+comMQTLs.f <- comMQTLs %>%
+  filter(!is.na(Ref)) %>%
+  filter(!(sign(b) != sign(beta) & A1 == Ref)) %>%
+  filter(!(sign(b) == sign(beta) & A1 == Alt))
+
+meqtlCpGs <- unique(comMQTLs.f$gene)
+
+meQTL_Sum <- data.frame(CpG = c(childCpGs, sharedCpGs), 
+                        Type = rep(c("Children-specific", "Children and adult shared"), 
+                                   c(length(childCpGs), length(sharedCpGs)))) %>%
+  rbind(data.frame(CpG = filter(methyAnnot, !Name %in% .$CpG)$Name, 
+                   Type = "None")) %>%
+  mutate(meQTL = CpG %in% meqtlCpGs) %>%
+  group_by(Type) %>%
+  summarize(meQTLin = sum(meQTL), no_meQTL = sum(!meQTL))
+
+sharedmeQTL <- getOR(2:3, meQTL_Sum[-2, ])
+childmeQTL <- getOR(2:3, meQTL_Sum[-1, ])
+
+## Compare ROADMAP chromatin states ####
+chromSt_adult <-  data.frame(CpG = c(childCpGs, sharedCpGs), 
+                             eQTM = rep(c("CpGs in child-specific eQTMs", "CpGs in age-shared eQTMs"), 
+                                        c(length(childCpGs), length(sharedCpGs)))) %>%
+  rbind(data.frame(CpG = filter(methyAnnot, !Name %in% .$CpG)$Name, 
+                   eQTM = "None")) %>%
+  left_join(mutate(methyAnnot, CpG = Name) %>%  select(CpG, eval(chromStates))) %>%
+  group_by(eQTM) %>%
+  summarize_at(chromStates, list(sum = sum, sum2 = sum2, prop = mean))
+
+
+chromSt_enrich_adult <- lapply(c("CpGs in child-specific eQTMs", "CpGs in age-shared eQTMs"), function(t){
+  rbind(filter(chromSt_adult, eQTM == t),
+        filter(chromSt_adult, eQTM == "None")) %>%
+    select(ends_with("sum"), ends_with("sum2")) %>%
+    g(chromStates, cols = c("_sum", "_sum2")) %>%
+    as_tibble() %>%
+    mutate(par = c("OR", "p.val", "ORlow", "ORhigh")) %>%
+    gather("Region", "Value", 1:15) %>%
+    mutate(eQTM = t)
+})
+chromSt_enrich_adult <- Reduce(rbind, chromSt_enrich_adult)
+
+chrom_adult <- chromSt_enrich_adult %>%
+  spread(par, Value) %>%
+  mutate(Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
+                               ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
+                                      ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
+                                             ifelse(Region %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
+                                                    ifelse(Region %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Region)
+                                             )
+                                      )
+                               )
+  ), 
+  levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
+  ),
+  ) %>%
+  ggplot(aes(x = Region, y = OR, fill = eQTM)) + 
+  geom_bar(stat = "identity", position=position_dodge(), color= "black") + 
+  geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
+  scale_y_continuous(trans = "log2", 
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+  scale_fill_discrete(name = "CpG type") +
+  geom_hline(yintercept = 1) +
+  scale_x_discrete(name = "ROADMAP chromatin states") +
+  facet_wrap(~ Group, scales = "free_x") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+png("paper/enrich_chromStates_adult.png", width = 2500, height = 1500, res = 300)
+chrom_adult
+dev.off()
+
+chromSt_adult_prop <- chromSt_adult %>%
+  select(eQTM, ends_with("prop")) %>%
+  gather(categories, proportion, 2:(2+length(chromStates) - 1)) %>%
+  ungroup() %>%
+  mutate(Type = as.character(eQTM),
+         Type = ifelse(Type == "None", "CpGs not in eQTMs", Type),
+         Type = factor(Type, levels = c("CpGs not in eQTMs", "CpGs in age-shared eQTMs", "CpGs in child-specific eQTMs")),
+         categories = gsub("_prop", "", categories),
+         Group = factor(ifelse(categories %in% c("TssA", "TssAFlnk"), "TssProxProm",
+                               ifelse(categories %in% c("Tx", "TxWk"), "ActTrans", 
+                                      ifelse(categories %in% c("Enh", "EnhG"), "Enhancer", 
+                                             ifelse(categories %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
+                                                    ifelse(categories %in% c("ReprPC", "ReprPCWk"), "ReprPoly", categories)
+                                             )
+                                      )
+                               )
+         ), 
+         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
+         ),
+         categories = factor(categories, levels = chromStates)) %>%
+  ggplot(aes(x = categories, y = proportion*100, fill = Type)) +
+  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
+  scale_x_discrete(name = "ROADMAP chromatin states") +
+  facet_wrap(~ Group, scales = "free_x") +  
+  scale_y_continuous(name = "Proportion of CpGs (%)") +
+  scale_fill_manual(name = "CpG type", values = c("#FFFFFF", "#F8766D", "#00BFC4")) +
+  theme_bw()
+
+png("paper/chromStatesProp_age.png", width = 2500, height = 2000, res = 300)
+chromSt_adult_prop
+dev.off()
