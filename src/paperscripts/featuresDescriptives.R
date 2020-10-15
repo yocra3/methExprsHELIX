@@ -77,9 +77,9 @@ CpG_plot <- overDF_aut %>%
   group_by(CpG) %>%
   summarize(n = n()) %>%
   ggplot(aes(x = n)) + geom_histogram(binwidth = 10) +
-  scale_x_continuous("", limits = c(0, 1250)) +
-  scale_y_continuous("")  +
-  ggtitle("TCs paired with each CpG") +
+  scale_x_continuous("TCs paired with a CpG", limits = c(0, 1250)) +
+  scale_y_continuous("Number of CpGs")  +
+  ggtitle("CpGs pairing distribution") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
@@ -88,9 +88,9 @@ TC_plot <- overDF_aut %>%
   group_by(TC) %>%
   summarize(n = n()) %>%
   ggplot(aes(x = n)) + geom_histogram(binwidth = 10) +
-  scale_x_continuous("", limits = c(0, 1250)) +
-  scale_y_continuous("")  +
-  ggtitle("CpGs paired with each TC") +
+  scale_x_continuous("CpGs paired with each TC", limits = c(0, 1250)) +
+  scale_y_continuous("Number of TCs")  +
+  ggtitle("TCs pairing distribution") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 

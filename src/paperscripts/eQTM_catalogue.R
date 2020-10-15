@@ -86,17 +86,22 @@ CpG_plot <- sigDf %>%
   group_by(CpG) %>%
   summarize(n = n()) %>%
   ggplot(aes(x = n)) + geom_histogram(binwidth = 1) +
-  scale_x_continuous("", limits = c(0, 50)) +
-  scale_y_continuous("")  +
-  ggtitle("TCs associated with each CpG")
+  scale_x_continuous("TCs associated with a CpG", limits = c(0, 50)) +
+  scale_y_continuous("Number of CpGs")  +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggtitle("CpGs pairing distribution in cis-eQTMs")
 
 TC_plot <- sigDf %>%
   group_by(TC) %>%
   summarize(n = n()) %>%
   ggplot(aes(x = n)) + geom_histogram(binwidth = 1) +
-  scale_x_continuous("", limits = c(0, 50)) +
-  scale_y_continuous("")  +
-  ggtitle("CpGs associated with each TC")
+  scale_x_continuous("CpGs associated with each TC", limits = c(0, 50)) +
+  scale_y_continuous("Number of TCs")  +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggtitle("TCs pairing distribution in cis-eQTMs")
+
 
 png("paper/eQTMs_CpGs_TC_distr.png", width = 2000, height = 1500, res = 300)
 plot_grid(CpG_plot, TC_plot, labels = "AUTO", nrow = 2)
