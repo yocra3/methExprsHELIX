@@ -293,11 +293,11 @@ dev.off()
 ## Distance per direction + eQTM 
 png("paper/distance_distr.png", width = 2000, height = 1300, res = 300)
 modU_comp %>%
-  mutate(Direction = ifelse(!sigPair, "Non-eQTM", ifelse(FC > 0, "Positive", "Inverse")),
-         Direction = factor(Direction, levels = c("Inverse", "Positive", "Non-eQTM"))) %>%
+  mutate(Direction = ifelse(!sigPair, "Non-eQTM", ifelse(FC > 0, "Positive eQTM", "Inverse eQTM")),
+         Direction = factor(Direction, levels = c("Inverse eQTM", "Positive eQTM", "Non-eQTM"))) %>%
   ggplot(aes(x = Distance, color = Direction)) + geom_density() + 
   theme_bw() + 
-  scale_color_manual(name = "eQTM type", values = c("#E69F00", "#009E73", "#000000")) +
+  scale_color_manual(name = "CpG-TC pair type", values = c("#E69F00", "#009E73", "#000000")) +
   scale_x_continuous(name = "CpG-TC TSS distance", 
                      breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
