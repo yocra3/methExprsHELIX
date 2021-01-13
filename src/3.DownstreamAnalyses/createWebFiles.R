@@ -78,11 +78,13 @@ mainAll <- modU %>%
   left_join(mainFeats, by = "CpG") %>%
   left_join(gexpAnnotGood, by = "TC")
 
-write.table(mainAll, file = "HELIX_blood_eQTM_WebCat/eQTM_autosome_unadj.cells.txt", col.names = TRUE,
+write.table(mainAll, file = "HELIX_blood_eQTM_WebCat/eQTM_autosome_unadj.cells.txt", 
+            col.names = TRUE, sep = "\t",
             quote = FALSE, row.names = FALSE)
 
 maineQTM <- subset(mainAll, sigPair == TRUE)
-write.table(maineQTM, file = "HELIX_blood_eQTM_WebCat/eQTM_autosome_unadj.cells_SIG.txt", col.names = TRUE,
+write.table(maineQTM, file = "HELIX_blood_eQTM_WebCat/eQTM_autosome_unadj.cells_SIG.txt", 
+            col.names = TRUE,  sep = "\t",
             quote = FALSE, row.names = FALSE)
 
 
@@ -103,11 +105,13 @@ cellAll <- modC %>%
   left_join(cellFeats, by = "CpG") %>%
   left_join(gexpAnnotGood, by = "TC")
 
-write.table(cellAll, file = "HELIX_blood_eQTM_WebCat/eQTM_autosome_adj.cells.txt", col.names = TRUE,
+write.table(cellAll, file = "HELIX_blood_eQTM_WebCat/eQTM_autosome_adj.cells.txt", 
+            col.names = TRUE, sep = "\t",
             quote = FALSE, row.names = FALSE)
 
 celleQTM <- subset(cellAll, sigPair == TRUE)
-write.table(celleQTM, file = "HELIX_blood_eQTM_WebCat/eQTM_autosome_adj.cells_SIG.txt", col.names = TRUE,
+write.table(celleQTM, file = "HELIX_blood_eQTM_WebCat/eQTM_autosome_adj.cells_SIG.txt", 
+            col.names = TRUE, sep = "\t",
             quote = FALSE, row.names = FALSE)
 
 
@@ -153,5 +157,6 @@ snpTab <- mergedDf %>%
   select(SNP, CpG, TC, EA, NEA, EF, SNP_CpG_beta, SNP_CpG_p.value,
          SNP_TC_log2FC, SNP_TC_p.value, CpG_TC_log2FC,
          CpG_TC_p.value)
-write.table(snpTab, file = "HELIX_blood_eQTM_WebCat/eQTM_SNPs_autosome_unadj.cells.txt", col.names = TRUE,
+write.table(snpTab, file = "HELIX_blood_eQTM_WebCat/eQTM_SNPs_autosome_unadj.cells.txt", 
+            col.names = TRUE, sep = "\t",
             quote = FALSE, row.names = FALSE)
