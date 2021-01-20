@@ -47,7 +47,8 @@ methyAnnotGood <- methyAnnot %>%
   mutate(CpG = Name,
          CpG_chr = chr,
          CpG_pos = pos,
-         CpG_gene = sapply(UCSC_RefGene_Name, function(x) paste(unique(x), collapse = "/"))) %>%
+         CpG_gene = sapply(UCSC_RefGene_Name, function(x) paste(unique(x), collapse = "/")),
+         CpG_range = meth_range) %>%
   select(starts_with("CpG"), -CpG_maf)
 
 
@@ -57,7 +58,8 @@ gexpAnnotGood <- expAnnot %>%
   mutate(TC_gene_start = start,
          TC_gene_end = stop,
          TC_gene_TSS = TSS_Affy,
-         TC_gene = sapply(GeneSymbol_Affy, function(x) paste(unique(x), collapse = "/"))) %>%
+         TC_gene = sapply(GeneSymbol_Affy, function(x) paste(unique(x), collapse = "/")),
+         TC_call_rate = CallRate) %>%
   select(starts_with("TC"), -TC_size)
 
 
