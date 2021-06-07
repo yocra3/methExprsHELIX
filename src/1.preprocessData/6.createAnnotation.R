@@ -7,6 +7,7 @@ library(SummarizedExperiment)
 library(minfi)
 library(dplyr)
 library(matrixStats)
+library(readxl)
 
 # DNA Methylation Annotation ####
 load("results/preprocessFiles/Methylation_GRSet.RData")
@@ -63,6 +64,12 @@ a <- strsplit(rd$UCSC_RefGene_Name, ";")
 a[a == "character(0)"] <- ""
 rd$UCSC_RefGene_Name <- a
 
+# Add reliability
+rel <- read_xlsx("data/PMID32885222_reliability.xlsx", skip = 2) %>%
+  mutate(Name = `Illumina Probe ID`) %>%
+  dplyr::select(Name, Reliability) 
+
+rd <- merge(rd, rel, by = "Name")
 methyAnnot <- rd
 save(methyAnnot, file = "results/preprocessFiles/methyAnnotation.Rdata")
 

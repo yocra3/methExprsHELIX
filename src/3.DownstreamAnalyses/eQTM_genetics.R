@@ -15,18 +15,39 @@ library(snpStats)
 library(MASS)
 library(topGO)
 
-load("results/MethComBatExpResidualsNoCellAdj/allres_simP_cpgs.Rdata")
+load("results/MethComBatExpResidualsCellAdj/allres_simP_cpgs.Rdata")
 load("results/preprocessFiles/allOverlaps.Rdata")
 load("results/preprocessFiles/methyAnnotation.Rdata")
 load("results/preprocessFiles/gexpAnnotation.Rdata")
 
 # Get useful variables ####
+methyAnnot <- methyAnnot %>%
+  as_tibble() %>%
+  mutate(CpG = Name)
+
 CpGsNum <- df %>%
   group_by(CpG) %>%
   summarise(nTC = sum(sigPair)) %>%
-  mutate(nCat = ifelse(nTC > 3, "4+", nTC))
+  mutate(nCat = ifelse(nTC > 3, "4+", nTC)) %>%
+  left_join(dplyr::select(methyAnnot, CpG, Reliability), by = "CpG")
+sigDf <- df %>%
+  as_tibble() %>%
+  filter(sigPair)
 
 codingTCs <- subset(expAnnot, Coding == "coding")$transcript_cluster_id
+
+
+CpGsSum <- df %>%
+  group_by(CpG) %>%
+  summarise(Type = ifelse(sum(sigPair) == 0, "Non-significant",
+                          ifelse(sum(sigPair) == 1, "Mono", "Multi")),
+            Direction = ifelse(sum(sigPair) == 0, "Non-significant",
+                               ifelse(all(FC[sigPair] > 0), "Positive", 
+                                      ifelse(all(FC[sigPair] < 0), "Inverse", "Both")))) %>%
+  mutate(Combined = ifelse(Type == "Non-significant", 
+                           "Non-significant", 
+                           paste(Type, Direction, sep = "_")))
+
 
 ## Heritability ####
 ## Create summary tibble
@@ -49,7 +70,7 @@ h2tot <- herm %>%
         legend.position = "none")
 
 h2SNP <- herm %>%
-  ggplot(aes(x = nCat, y = h2_total)) + 
+  ggplot(aes(x = nCat, y = h2_SNPs)) + 
   geom_boxplot() + 
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
   scale_x_discrete(name = "Number of TCs associated with a CpG") +
@@ -67,6 +88,12 @@ herm %>%
 wilcox.test(subset(herm, nTC == 0)$h2_total,
             subset(herm, nTC != 0)$h2_total, conf.int = TRUE)
 
+
+herm %>%
+  filter(nTC != 0) %>%
+  lm(formula = h2_total ~  nTC) %>%
+  summary()
+
 herm %>%
   mutate(sig = ifelse(nTC == 0, "Non-significant", "Significant"),
          sig = factor(sig, levels = c("Non-significant", "Significant"))) %>%
@@ -76,15 +103,44 @@ herm %>%
 wilcox.test(subset(herm, nTC == 0)$h2_SNPs,
             subset(herm, nTC != 0)$h2_SNPs, conf.int = TRUE)
  
-herm %>%
- filter(nTC != 0) %>%
-  lm(formula = h2_total ~  nTC) %>%
-  summary()
 
 herm %>%
   filter(nTC != 0) %>%
   lm(formula = h2_SNPs ~  nTC) %>%
   summary()
+
+h2tot.rel <- herm %>%
+  filter(!is.na(Reliability) & Reliability >= 0.4) %>%
+  ggplot(aes(x = nCat, y = h2_total)) + 
+  geom_boxplot() +
+  geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
+  scale_x_discrete(name = "Number of TCs associated with a CpG") +
+  scale_y_continuous(name = "Total heritability", limits = c(0, 1)) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none")
+
+h2SNP.rel <- herm %>%
+  filter(!is.na(Reliability) & Reliability >= 0.4) %>%
+  ggplot(aes(x = nCat, y = h2_SNPs)) + 
+  geom_boxplot() + 
+  geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
+  scale_x_discrete(name = "Number of TCs associated with a CpG") +
+  scale_y_continuous(name = "SNP heritability", limits = c(0, 1)) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none")
+
+png("paper/eQTMs_heritability_rel.png", width = 3500, height = 1000, res = 300)
+plot_grid(h2tot.rel, h2SNP.rel, ncol = 2, labels = "AUTO")
+dev.off()
+
+wilcox.test(subset(herm, nTC == 0 & Reliability >= 0.4)$h2_total,
+            subset(herm, nTC != 0 & Reliability >= 0.4)$h2_total, conf.int = TRUE)
+
+
+wilcox.test(subset(herm, nTC == 0 & Reliability >= 0.4)$h2_SNPs,
+            subset(herm, nTC != 0 & Reliability >= 0.4)$h2_SNPs, conf.int = TRUE)
 
 
 ## Common mQTLs between ARIES and HELIX ####
@@ -123,15 +179,8 @@ meQTLTab <- CpGsNum %>%
   group_by(nCat) %>%
   summarize_if(is.logical, list(sum, mean))
 
-# nCat  mQTL_fn1 cisQTL_fn1 transQTL_fn1 mQTL_fn2 cisQTL_fn2 transQTL_fn2
-# <chr>    <int>      <int>        <int>    <dbl>      <dbl>        <dbl>
-#  0        26052      24471         1944   0.0742     0.0697      0.00554
-#  1         5885       5832          148   0.272      0.270       0.00685
-#  2         2427       2408           65   0.335      0.333       0.00898
-#  3         1117       1117           24   0.351      0.351       0.00754
-#  4+        1141       1131           48   0.356      0.352       0.0150
 sum(sigDf$CpG %in% comCpGs)
-
+sum(unique(sigDf$CpG) %in% comCpGs)
 
 meQTLTab2 <- CpGsNum %>%
   mutate(mQTLin = CpG %in% comCpGs,
@@ -157,17 +206,6 @@ OR <- x2[1]/x2[2]/x2[3]*x2[4]
 p <- chisq.test(x2)$p.value
 
 
-meQTL_p <- ORs %>% 
-  t() %>%
-  data.frame() %>%
-  mutate(cat = rownames(.)) %>%
-  ggplot(aes(x = cat, y = OR)) +
-  geom_bar(stat = "identity") +
-  scale_x_discrete(name = "num TCs affected") +
-  scale_y_continuous(name = "meQTLs enrichment", trans = "log2") +
-  theme_bw() +
-  theme(legend.position = "none")
-
 x2 <- meQTLTab2 %>% 
   mutate(cat = ifelse(nCat == 0, "noeQTM", "eQTM")) %>%
   group_by(cat) %>%
@@ -178,14 +216,12 @@ x2[1]/x2[2]/x2[3]*x2[4]
 
          
 comMQTLs.f %>%
-  select(SNP, gene) %>%
+  dplyr::select(SNP, gene) %>%
   distinct() %>%
   group_by(gene) %>%
   summarize(CpGs = n()) %>%
   pull(., CpGs) %>%
   summary()
-# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
-# 1.0    13.0    40.0    76.9    98.5  1816.0
 
 comMQTLs.f %>%
   dplyr::select(SNP, gene) %>%
@@ -198,20 +234,6 @@ comMQTLs.f %>%
             l = quantile(CpGs, 0.25),
             h = quantile(CpGs, 0.75))
 
-comMQTLs.f %>%
-  dplyr::select(SNP, gene) %>%
-  distinct() %>%
-  group_by(gene) %>%
-  summarize(CpGs = n()) %>%
-  mutate(eQTM = ifelse(gene %in% unique(sigDf$CpG), "eQTM", "non-eQTM")) %>%
-  glm.nb(CpGs ~ eQTM, .) %>%
-  summary()
-
-
-
-write.table(meQTLTab[, c(1:2, 5, 3, 6, 4, 7)], file = "paper/meQTL_sum.tab",
-            quote = FALSE, row.names = FALSE)
-
 meQTL_p <- CpGsNum %>%
   mutate(mQTL = CpG %in% comCpGs) %>%
   group_by(nCat) %>%
@@ -219,7 +241,7 @@ meQTL_p <- CpGsNum %>%
   ggplot(aes(x = nCat, y = prop)) +
   geom_bar(position = "dodge", stat = "identity") +
   scale_x_discrete(name = "Number of TCs associated with a CpG") +
-  scale_y_continuous(name = "CpGs with meQTL (%)") +
+  scale_y_continuous(name = "CpGs with meQTLs (%)") +
   theme_bw() +
   theme(legend.position = "none")
   
@@ -228,65 +250,42 @@ png("paper/eQTMsGenetics.png", width = 3500, height = 2000, res = 300)
 plot_grid(plot_grid(h2tot, h2SNP, nrow = 2, labels = "AUTO"), meQTL_p, ncol = 2, labels = c("", "C"))
 dev.off()
 
+meQTLTab2 <- CpGsNum %>%
+  mutate(mQTLin = CpG %in% comCpGs,
+         mQTLOut = !CpG %in% comCpGs) %>%
+  group_by(nCat) %>%
+  summarize_if(is.logical, sum)
 
-CpGsNum %>%
+tab.rel <- CpGsNum %>%
+  filter(!is.na(Reliability) & Reliability >= 0.4) %>%
+  mutate(mQTLin = CpG %in% comCpGs,
+         mQTLOut = !CpG %in% comCpGs) %>%
+  group_by(nCat) %>%
+  summarize_if(is.logical, sum) %>% 
+  mutate(cat = ifelse(nCat == 0, "noeQTM", "eQTM")) %>%
+  group_by(cat) %>%
+  summarize(mQTLin = sum(mQTLin), mQTLOut = sum(mQTLOut)) %>%
+  data.matrix()
+tab.rel <- tab.rel[, -1]
+tab.rel[1]/tab.rel[2]/tab.rel[3]*tab.rel[4] 
+
+
+
+meQTL_p_rel <- CpGsNum %>%
+  filter(!is.na(Reliability) & Reliability >= 0.4) %>%
   mutate(mQTL = CpG %in% comCpGs) %>%
-  glm(mQTL ~ nTC, family = "binomial", .) %>%
-  summary()
-# Estimate Std. Error z value Pr(>|z|)
-# (Intercept) -2.391760   0.005913  -404.5   <2e-16 ***
-#   nTC          0.518905   0.006034    86.0   <2e-16 ***
-  
-CpGsNum %>%
-  mutate(mQTL = CpG %in% comCpGs) %>%
-  filter(nTC > 0) %>%
-  glm(mQTL ~ nTC, family = "binomial", .) %>%
-  summary()
-# Coefficients:
-#   Estimate Std. Error z value Pr(>|z|)
-# (Intercept) -0.987955   0.017510  -56.42   <2e-16 ***
-#   nTC          0.076388   0.006996   10.92   <2e-16 ***
-#   
+  group_by(nCat) %>%
+  summarize(prop = mean(mQTL)*100) %>%
+  ggplot(aes(x = nCat, y = prop)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  scale_x_discrete(name = "Number of TCs associated with a CpG") +
+  scale_y_continuous(name = "CpGs with meQTLs (%)") +
+  theme_bw() +
+  theme(legend.position = "none")
 
-
-
-eQTLtab <- CpGsSum %>%
-  mutate(mQTL = CpG %in% comCpGs,
-         mQTL2 = !mQTL,
-         Type = ifelse(Combined != "Non-significant", "Significant", "Non-significant")) %>%
-  group_by(Type) %>%
-  summarize_if(is.logical, sum) %>%
-  ungroup() %>%
-  select(-Type) %>%
-  data.matrix() 
-eQTLtab[2]/eQTLtab[1]/eQTLtab[4]*eQTLtab[3]
-# [1] 5.346554
-
-
-CpGsSum %>%
-  filter(Type != "Non-significant") %>%
-  mutate(mQTL = CpG %in% comCpGs,
-         mQTL2 = !mQTL) %>%
-  group_by(Type) %>%
-  summarize_if(is.logical, sum) %>%
-  ungroup() %>%
-  select(-Type) %>%
-  data.matrix() %>%
-  chisq.test()
-# Pearson's Chi-squared test with Yates' continuity correction
-# 
-# X-squared = 200.52, df = 1, p-value < 2.2e-16
-eQTLtab2 <- CpGsSum %>%
-  filter(Type != "Non-significant") %>%
-  mutate(mQTL = CpG %in% comCpGs,
-         mQTL2 = !mQTL) %>%
-  group_by(Type) %>%
-  summarize_if(is.logical, sum) %>%
-  ungroup() %>%
-  select(-Type) %>%
-  data.matrix() 
-eQTLtab2[2]/eQTLtab2[1]/eQTLtab2[4]*eQTLtab2[3]
-# [1] 1.39692
+png("paper/eQTMs_meqtlProp_rel.png", width = 2000, height = 1000, res = 300)
+meQTL_p_rel
+dev.off()
 
 
 # Integrate with gene expression ####
@@ -294,9 +293,6 @@ load("results/eQTLanalysis/eQTLs.Rdata")
 eQTL <- rbind(gexpme$cis$eqtls, gexpme$trans$eqtls) %>%
   mutate(TC = gene) %>%
   dplyr::select(-gene)
-
-sigDf <- filter(df, sigPair)
-
 
 ## Merge all associations 
 ## Remove non-coherent associations
@@ -306,7 +302,8 @@ mergedDf <- rbind(comCisQTL, comTransQTL) %>%
   inner_join(sigDf, by = "CpG") %>%
   inner_join(eQTL, by = c("snps", "TC")) %>%
   dplyr::select(-sigPair) %>%
-  filter(sign(beta.x)*sign(FC) == sign(beta.y))
+  filter(sign(beta.x)*sign(FC) != sign(beta.y)) %>%
+  tibble()
 
 length(unique(paste(mergedDf$CpG, mergedDf$TC)))
 length(unique(paste(mergedDf$CpG, mergedDf$TC)))/nrow(sigDf)
@@ -321,44 +318,38 @@ sum(unique(mergedDf$TC) %in% codingTCs)/sum(unique(sigDf$TC) %in% codingTCs)
 mergedDf <- rbind(comCisQTL, comTransQTL) %>%
   mutate(CpG = gene) %>%
   dplyr::select(-gene, -SNP) %>%
-  inner_join(sigDF, by = "CpG") %>%
+  inner_join(sigDf, by = "CpG") %>%
   inner_join(eQTL, by = c("snps", "TC")) %>%
   dplyr::select(-sigPair)
 
 mergedDf %>%
-  select(CpG, TC) %>%
+  dplyr::select(CpG, TC) %>%
   distinct() %>%
   group_by(TC) %>%
   summarize(CpGs = n()) %>%
   pull(., CpGs) %>%
   summary()
-# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
-# 1.000   1.000   2.000   3.593   4.000  80.000
 
 mergedDf %>%
-  select(SNP, TC) %>%
+  dplyr::select(snps, TC) %>%
   distinct() %>%
   group_by(TC) %>%
   summarize(CpGs = n()) %>%
   pull(., CpGs) %>%
   summary()
-# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
-# 1.0    19.0    62.0   104.2   145.0  1114.0
 
 
 
 mergedDf %>%
-  select(SNP, CpG) %>%
+  dplyr::select(snps, CpG) %>%
   distinct() %>%
   group_by(CpG) %>%
   summarize(CpGs = n()) %>%
   pull(., CpGs) %>%
   summary()
-# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
-# 1.00   17.00   51.00   88.27  122.00 1286.00
 
 mergedDf %>%
-  select(TC, CpG) %>%
+  dplyr::select(TC, CpG) %>%
   distinct() %>%
   group_by(CpG) %>%
   summarize(CpGs = n()) %>%
@@ -367,12 +358,6 @@ mergedDf %>%
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
 # 1.00    1.00    1.00    1.87    2.00   21.00
 
-
-## Check replication in GTEx
-### Download data (https://gtexportal.org/home/datasets) - 28/11/2019
-tar --extract --file=data/GTEx_Analysis_v8_eQTL.tar GTEx_Analysis_v8_eQTL/Whole_Blood.v8.signif_variant_gene_pairs.txt.gz
-mv GTEx_Analysis_v8_eQTL/ data/
-  
 
 ### Example
 # SNP: rs11585123
@@ -429,4 +414,7 @@ snpGenes <- df %>%
   distinct() %>%
   mutate(sig = factor(ifelse(TC %in% unique(mergedDf$TC), 1, 0)))
 snpGos <- computeGOs(snpGenes)
+## Genes used in GOs
+snpGos$go@geneData["Significant"]
+
 save(snpGos, file = "paper/snpGOs.Rdata")
