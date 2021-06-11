@@ -94,6 +94,16 @@ allGOData <- getGOdata(allGenes)
 ## Save as Rdata data and process in local
 save(allGos, file = "paper/GOobjects.Rdata")
 
+## Genes in eQTMs from reliable probes
+reliableGenes <- methyAnnot %>%
+  select(Reliability, CpG) %>%
+  right_join(df, by = "CpG") %>%
+  group_by(TC) %>%
+  summarize(sig = factor(ifelse(any(sigPair & Reliability > 0.4), 1, 0)))
+reliableGos <- computeGOs(reliableGenes)
+save(reliableGos, file = "paper/reliableGOobjects.Rdata")
+
+
 ## Genes used in GOs
 allGos$go@geneData["Significant"]
 
@@ -108,6 +118,7 @@ library(dplyr)
 server <- "/run/user/1000/gvfs/sftp:host=isgws06.isglobal.lan,user=cruiz/home/isglobal.lan/cruiz/data/WS_HELIX/HELIX_analyses/expr_met_SM/paper/"
 
 load(paste0(server, "GOobjects.Rdata"))
+load(paste0(server, "reliableGOobjects.Rdata"))
 load(paste0(server, "snpGOs.Rdata"))
 
 ## Define categories for GO terms
@@ -274,12 +285,16 @@ addImmunityInfo <- function(tab){
 ## Select GOs with p-value < 0.001
 allMod <- addImmunityInfo(subset(allGos$table, as.numeric(w0) < 0.001))
 snpMod <- addImmunityInfo(subset(snpGos$table, as.numeric(w0) < 0.001))
+relMod <- addImmunityInfo(subset(reliableGos$table, as.numeric(w0) < 0.001))
 
 write.table(allMod[, c("GO.ID", "GO_term", "w0", "parent", "immune")], 
             file = paste0(server, "/GOsAllGenes.txt"), 
             quote = FALSE, col.names = TRUE, sep = "\t", row.names = FALSE)
 write.table(snpMod[, c("GO.ID", "GO_term", "w0", "parent", "immune")], 
             file = paste0(server, "/GOsGenesSNPs.txt"), 
+            quote = FALSE, col.names = TRUE, sep = "\t", row.names = FALSE)
+write.table(relMod[, c("GO.ID", "GO_term", "w0", "parent", "immune")], 
+            file = paste0(server, "/GOsGenesReliable.txt"), 
             quote = FALSE, col.names = TRUE, sep = "\t", row.names = FALSE)
 
 
@@ -344,30 +359,6 @@ g2 <- function(x, gpos){
   sapply(gpos, function(y) getOR2(y, df = x))
 }
 
-methLevs_prop_plot <- methMethLevels %>%
-  filter(Direction != "Both") %>%
-  mutate(Low = low/tot,
-         Medium = medium/tot,
-         High = high/tot) %>%
-  select(Direction, Low, Medium, High) %>%
-  gather(categories, proportion, 2:4) %>%
-  ungroup() %>%
-  mutate(Direction = as.character(Direction),
-         Direction = ifelse(Direction == "Non-significant", "Non-eQTM", Direction),
-        Direction = factor(Direction,  levels = c("Non-eQTM", "eQTM", "Inverse", "Positive")),
-        categories = factor(categories, levels = c("Low", "Medium", "High"))) %>%
-  ggplot(aes(x = categories, y = proportion*100, fill = Direction)) +
-  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
-  scale_x_discrete(name = "Methylation levels") +
-  scale_y_continuous(name = "Proportion of CpGs (%)") +
-  scale_fill_manual(name = "CpG type", values = c("#FFFFFF", "#999999", "#E69F00", "#009E73"),
-                    labels = c("non-eQTMs", "eQTMs", "inverse-eQTMs", "positive-eQTMs")) +
-  theme_bw()
-
-png("paper/CpGFreqsMethLevels.png", width = 3000, height = 2000, res = 300)
-methLevs_prop_plot
-dev.off()
-
 typesMethLevs <- lapply(types, function(t){
   rbind(filter(methMethLevels, Direction == t),
         filter(methMethLevels, Direction == "Non-significant")) %>%
@@ -389,9 +380,9 @@ methLevsPlot <- combMethLevs %>%
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "Methylation levels", limits = cats, labels = tools::toTitleCase(cats)) +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("eQTMs", "inverse-eQTMs", "positive-eQTMs")) +
+  scale_x_discrete(name = "Categories of methylation levels", limits = cats, labels = tools::toTitleCase(cats)) +
+  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
   theme_bw() 
 
 png("paper/CpGEnrich_methLevels.png", width = 3000, height = 2000, res = 300)
@@ -434,9 +425,9 @@ methLevsPlot.rel <- Reduce(rbind, typesMethLevs.rel) %>%
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "Methylation levels", limits = cats, labels = tools::toTitleCase(cats)) +
+  scale_x_discrete(name = "Categories of methylation levels", limits = cats, labels = tools::toTitleCase(cats)) +
   scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("eQTMs", "inverse-eQTMs", "positive-eQTMs")) +
+                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
   theme_bw() 
 
 png("paper/CpGEnrich_methLevels_rel.png", width = 3000, height = 2000, res = 300)
@@ -463,33 +454,6 @@ methIsland <- as_tibble(methyAnnot) %>%
 islandStates <- c("N_Shelf", "N_Shore", "Island", "S_Shore", "S_Shelf", "OpenSea")
 
 
-Island_prop_plot <- methIsland %>%
-  filter(Direction != "Both") %>%
-  mutate(N_Shelf = N_Shelf/tot,
-         N_Shore = N_Shore/tot,
-         Island = Island/tot,
-         S_Shore = S_Shore/tot,
-         S_Shelf = S_Shelf/tot,
-         OpenSea = OpenSea/tot) %>%
-  select(-tot) %>%
-  gather(categories, proportion, 2:(2+length(islandStates) - 1)) %>%
-  ungroup() %>%
-  mutate(Direction = as.character(Direction),
-         Direction = ifelse(Direction == "Non-significant", "Non-eQTM", Direction),
-         Direction = factor(Direction,  levels = c("Non-eQTM", "eQTM", "Inverse", "Positive")),
-         categories = factor(categories, levels = islandStates)) %>%
-  ggplot(aes(x = categories, y = proportion*100, fill = Direction)) +
-  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
-  scale_x_discrete(name = "CpG island relative position", limits = islandStates) +
-  scale_y_continuous(name = "Proportion of CpGs (%)") +
-  scale_fill_manual(name = "CpG type", values = c("#FFFFFF", "#999999", "#E69F00", "#009E73"),
-                    labels = c("non-eQTMs", "eQTMs", "inverse-eQTMs", "positive-eQTMs")) +
-  theme_bw()
-
-png("paper/CpGFreqsIsland.png", width = 3000, height = 2000, res = 300)
-Island_prop_plot
-dev.off()
-
 typesIsland <- lapply(types, function(t){
     rbind(filter(methIsland, Direction == t),
           filter(methIsland, Direction == "Non-significant")) %>%
@@ -512,8 +476,8 @@ cpgPosPlot <- combIsland %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "CpG island relative position", limits = islandStates) +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("eQTMs", "inverse-eQTMs", "positive-eQTMs")) +
+  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
   theme_bw() 
 
 png("paper/CpGEnrichIsland.png", width = 3000, height = 2000, res = 300)
@@ -557,47 +521,14 @@ cpgPosPlot.rel <- Reduce(rbind, typesIsland.rel) %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "CpG island relative position", limits = islandStates) +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("eQTMs", "inverse-eQTMs", "positive-eQTMs")) +
+  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
   theme_bw() 
 
 png("paper/CpGEnrichIsland_rel.png", width = 3000, height = 2000, res = 300)
 cpgPosPlot.rel
 dev.off()
 
-# CpG Islands vs Methylation levels
-isl_all_meth <- as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  select(CpG, Relation_to_Island, median) %>%
-  right_join(CpGsSum, by = "CpG") %>%
-  mutate(Significant = ifelse(Type == "Non-significant", "CpGs not in eQTMs", "CpGs in eQTMs")) %>%
-  ggplot(aes(x = Relation_to_Island, y = median, fill = Significant)) +
-  geom_violin() +
-  scale_x_discrete(name = "CpG island relative position", limits = islandStates) +
-  scale_y_continuous(name = "Median methylation") +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#FFFFFF")) +
-  theme_bw()
-
-png("paper/Islands_methLevs_violin.png", width = 3000, height = 1000, res = 300)
-isl_all_meth
-dev.off()
-
-isl_all_meth_rel <- as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  select(CpG, Relation_to_Island, median) %>%
-  right_join(CpGsSum, by = "CpG") %>%
-  filter(!is.na(Reliability) & Reliability >= 0.4) %>%
-  mutate(Significant = ifelse(Type == "Non-significant", "CpGs not in eQTMs", "CpGs in eQTMs")) %>%
-  ggplot(aes(x = Relation_to_Island, y = median, fill = Significant)) +
-  geom_violin() +
-  scale_x_discrete(name = "CpG island relative position", limits = islandStates) +
-  scale_y_continuous(name = "Median methylation") +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#FFFFFF")) +
-  theme_bw()
-
-png("paper/Islands_methLevs_violin_rel.png", width = 3000, height = 1000, res = 300)
-isl_all_meth_rel
-dev.off()
 
 
 ## Chromatin states ####
@@ -627,34 +558,6 @@ methChromSt <- as_tibble(methyAnnot) %>%
   filter(Direction != "Non-significant") %>%
   rbind(methChromStIni)
 
-
-chromSt_prop_plot <- methChromSt %>%
-  filter(Direction != "Both") %>%
-  select(Direction, ends_with("prop")) %>%
-  gather(categories, proportion, 2:(2+length(chromStates) - 1)) %>%
-  ungroup() %>%
-  mutate(Direction = factor(Direction,  levels = c("non-eQTM", "eQTM", "Inverse", "Positive")),
-         categories = gsub("_prop", "", categories),
-         Group = factor(ifelse(categories %in% c("TssA", "TssAFlnk"), "TssProxProm",
-                               ifelse(categories %in% c("Tx", "TxWk"), "ActTrans", 
-                                      ifelse(categories %in% c("Enh", "EnhG"), "Enhancer", 
-                                             ifelse(categories %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
-                                                    ifelse(categories %in% c("ReprPC", "ReprPCWk"), "ReprPoly", categories)
-                                             )
-                                      )
-                               )
-         ), 
-         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
-         ),
-         categories = factor(categories, levels = chromStates)) %>%
-  ggplot(aes(x = categories, y = proportion*100, fill = Direction)) +
-  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
-  scale_x_discrete(name = "ROADMAP chromatin states") +
-  facet_wrap(~ Group, scales = "free_x") +  
-  scale_y_continuous(name = "Proportion of CpGs (%)") +
-  scale_fill_manual(name = "CpG type", values = c("#FFFFFF", "#999999", "#E69F00", "#009E73"),
-                    labels = c("non-eQTMs", "eQTMs", "inverse-eQTMs", "positive-eQTMs")) +
-  theme_bw()
 
 
 
@@ -693,8 +596,8 @@ chromStatesPlot <- combChromSt %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "ROADMAP chromatin states") +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("eQTMs", "inverse-eQTMs", "positive-eQTMs")) +
+  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
   facet_wrap(~ Group, scales = "free_x") +
   theme_bw() 
 
@@ -761,8 +664,8 @@ chromStatesPlot.rel <- Reduce(rbind, typesChromSt.rel) %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "ROADMAP chromatin states") +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("eQTMs", "inverse-eQTMs", "positive-eQTMs")) +
+  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
   facet_wrap(~ Group, scales = "free_x") +
   theme_bw() 
 
@@ -770,73 +673,20 @@ png("paper/CpGEnrichChromStates_rel.png", width = 3000, height = 2000, res = 300
 chromStatesPlot.rel
 dev.off()
 
-## Chromatin states vs methylation levels
-chrom_all_meth <-   as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  select(CpG, eval(chromStates), median) %>%
-  right_join(CpGsSum, by = "CpG") %>%
-  gather(Region, Val, 2:16) %>%
-  filter(Val == TRUE) %>%
-  mutate(Significant = ifelse(Type == "Non-significant", "CpGs not in eQTMs", "CpGs in eQTMs"),
-         Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
-                               ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
-                                      ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
-                                             ifelse(Region %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
-                                                    ifelse(Region %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Region)
-                                             )
-                                      )
-                               )
-         ), 
-         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
-         )
-  ) %>%
-  ggplot(aes(x = Region, y = median, fill = Significant)) +
-  geom_violin() +
-  facet_wrap(~ Group, scales = "free_x") +
-  scale_x_discrete(name = "ROADMAP chromatin states") +
-  scale_y_continuous(name = "Median methylation") +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#FFFFFF")) +
-  theme_bw()
-png("paper/medianMethvsChromState.png", width = 3000, height = 3000, res = 300)
-chrom_all_meth
-dev.off()
-
-chrom_all_meth.rel <-   as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  select(CpG, eval(chromStates), median) %>%
-  right_join(CpGsSum, by = "CpG") %>%
-  filter(!is.na(Reliability) & Reliability >= 0.4) %>%
-  gather(Region, Val, 2:16) %>%
-  filter(Val == TRUE) %>%
-  mutate(Significant = ifelse(Type == "Non-significant", "CpGs not in eQTMs", "CpGs in eQTMs"),
-         Group = factor(ifelse(Region %in% c("TssA", "TssAFlnk"), "TssProxProm",
-                               ifelse(Region %in% c("Tx", "TxWk"), "ActTrans", 
-                                      ifelse(Region %in% c("Enh", "EnhG"), "Enhancer", 
-                                             ifelse(Region %in% c("TssBiv", "BivFlnk", "EnhBiv"), "BivReg", 
-                                                    ifelse(Region %in% c("ReprPC", "ReprPCWk"), "ReprPoly", Region)
-                                             )
-                                      )
-                               )
-         ), 
-         levels = c("TssProxProm", "TxFlnk", "ActTrans", "Enhancer", "ZNF.Rpts", "BivFlnk", "BivReg", "Het", "ReprPoly", "Quies")
-         )
-  ) %>%
-  ggplot(aes(x = Region, y = median, fill = Significant)) +
-  geom_violin() +
-  facet_wrap(~ Group, scales = "free_x") +
-  scale_x_discrete(name = "ROADMAP chromatin states") +
-  scale_y_continuous(name = "Median methylation") +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#FFFFFF")) +
-  theme_bw()
-png("paper/medianMethvsChromState_rel.png", width = 3000, height = 3000, res = 300)
-chrom_all_meth.rel
-dev.off()
-
 ### Combined plot
-png("paper/enrich_combined.png", width = 3500, height = 3000, res = 300)
+png("paper/enrich_combined_reliable.png", width = 3500, height = 3000, res = 300)
 plot_grid(
   plot_grid(cpgPosPlot.rel, methLevsPlot.rel, labels = c("A", "C"), nrow = 1),
   chromStatesPlot.rel, 
+  labels = c("", "B"), ncol = 1, rel_heights = c(1, 2)
+)
+dev.off()
+
+
+png("paper/enrich_combined.png", width = 3500, height = 3000, res = 300)
+plot_grid(
+  plot_grid(cpgPosPlot, methLevsPlot, labels = c("A", "C"), nrow = 1),
+  chromStatesPlot, 
   labels = c("", "B"), ncol = 1, rel_heights = c(1, 2)
 )
 dev.off()
@@ -997,11 +847,13 @@ ewas_db <- combCatal %>%
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "CpG type", labels = c("eQTMs", "inverse-eQTMs", "positive-eQTMs")) +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73")) +
+  scale_x_discrete(name = "eQTM type", labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
+  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73")) +
   theme_bw() +
-  theme(legend.position = "none") +
-  facet_grid(~  dataset)
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  facet_grid(~  dataset) +
+  ggtitle("All CpG probes")
 
 png("paper/CpGEnrichEWASdbs.png", width = 3000, height = 1000, res = 300)
 ewas_db
@@ -1044,37 +896,20 @@ ewas_db.rel <- combCatal.rel %>%
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "CpG type", labels = c("eQTMs", "inverse-eQTMs", "positive-eQTMs")) +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73")) +
+  scale_x_discrete(name = "eQTM type", labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
+  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73")) +
   theme_bw() +
-  theme(legend.position = "none") +
-  facet_grid(~  dataset)
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  facet_grid(~  dataset) +
+  ggtitle("Reliable CpG probes")
+
 
 png("paper/CpGEnrichEWASdbs_rel.png", width = 3000, height = 1000, res = 300)
 ewas_db.rel
 dev.off()
 
-
-
-
-png("paper/CpGEnrichEWASdbs_methLevels.png", width = 3000, height = 1500, res = 300)
-as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  select(CpG, median) %>%
-  right_join(ewasCatSum, by = "CpG") %>%
-  mutate(Significant = ifelse(Type == "Non-significant", "CpGs not in eQTMs", "CpGs in eQTMs"),
-         Catalogue = Present) %>%
-  select(Catalogue, Significant, CpG, median) %>%
-  right_join(atlasSum, by = "CpG") %>%
-  mutate(Atlas = ifelse(Changed, "Present", "Absent")) %>%
-  select(Catalogue, Atlas, Significant, median) %>%
-  gather(Database, Status, 1:2) %>%
-  mutate(Database = ifelse(Database == "Catalogue", "EWAS Catalog", "EWAS Atlas")) %>%
-  ggplot(aes(x = Status, y = median, fill = Significant)) +
-  geom_violin() +
-  scale_x_discrete(name = "Presence in catalogue") +
-  scale_y_continuous(name = "Median methylation") +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#FFFFFF")) +
-  facet_grid(~ Database) +
-  theme_bw()
+png("paper/CpGEnrichEWASdbs_panel.png", width = 3000, height = 2000, res = 300)
+plot_grid(ewas_db, ewas_db.rel, labels = c("A", "B"), nrow = 2)
 dev.off()
+

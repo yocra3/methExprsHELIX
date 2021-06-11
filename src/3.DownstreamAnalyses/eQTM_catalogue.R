@@ -94,8 +94,9 @@ CpG_plot <- sigDf %>%
   group_by(CpG) %>%
   summarize(n = n()) %>%
   ggplot(aes(x = n)) + geom_histogram(binwidth = 1) +
-  scale_x_continuous("TCs associated with a CpG", limits = c(0, 50)) +
+  scale_x_continuous("TCs per CpG", limits = c(0, 50)) +
   scale_y_continuous("Number of CpGs")  +
+  geom_vline(aes(xintercept = median(n))) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5)) +
   ggtitle("CpGs pairing distribution in cis-eQTMs")
@@ -104,8 +105,9 @@ TC_plot <- sigDf %>%
   group_by(TC) %>%
   summarize(n = n()) %>%
   ggplot(aes(x = n)) + geom_histogram(binwidth = 1) +
-  scale_x_continuous("CpGs associated with each TC", limits = c(0, 50)) +
+  scale_x_continuous("CpGs per TC", limits = c(0, 50)) +
   scale_y_continuous("Number of TCs")  +
+  geom_vline(aes(xintercept = median(n))) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5)) +
   ggtitle("TCs pairing distribution in cis-eQTMs")
@@ -148,7 +150,7 @@ featsC_var %>%
   ggplot(aes(x = sigVar, y = meth_range, fill = sigVar)) + 
   geom_boxplot() +
   theme_bw() +
-  scale_x_discrete(name = "") +
+  scale_x_discrete(name = "CpG Type") +
   theme(legend.position = "none") +
   scale_y_continuous(name = "Methylation range") +
   scale_fill_manual(values = c("#999999", "#FFFFFF"))
@@ -174,7 +176,7 @@ featsC_rel %>%
   ggplot(aes(x = sigVar, y = Reliability, fill = sigVar)) + 
   geom_boxplot() +
   theme_bw() +
-  scale_x_discrete(name = "") +
+  scale_x_discrete(name = "CpG Type") +
   theme(legend.position = "none") +
   scale_y_continuous(name = "Probe reliability") +
   scale_fill_manual(values = c("#999999", "#FFFFFF"))
@@ -198,7 +200,7 @@ int_TC %>%
   ggplot(aes(x = sig, y = CallRate, fill = sig)) + 
   geom_boxplot() +
   theme_bw() +
-  scale_x_discrete(name = "") +
+  scale_x_discrete(name = "TC type") +
   theme(legend.position = "none") +
   scale_y_continuous(name = "TC call rate") +
   scale_fill_manual(values = c("#999999", "#FFFFFF"))
@@ -230,14 +232,6 @@ sink()
 # Distance plots ####
 # Distance distribution
 ## Signif vs no-signif
-dist_all <- ggplot(modC_comp, aes(x = Distance, color = sigPair)) + geom_density() + 
-  theme_bw() + 
-  scale_color_discrete(name = "", labels = c("non-eQTM", "eQTM")) +
-  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
-                     labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
-  scale_y_continuous(name = "") + 
-  ggtitle("CpG-TC Distance (all pairs)") + 
-  theme(plot.title = element_text(hjust = 0.5))
 
 ks.test(filter(modC_comp, sigPair) %>% pull(., Distance),
         filter(modC_comp, !sigPair) %>% pull(., Distance))
@@ -272,34 +266,25 @@ modC_comp %>%
 
 
 ## Distance per direction + eQTM 
-png("paper/distance_distr.png", width = 2000, height = 1300, res = 300)
-modC_comp %>%
-  mutate(Direction = ifelse(!sigPair, "Non-eQTM", ifelse(FC > 0, "Positive eQTM", "Inverse eQTM")),
-         Direction = factor(Direction, levels = c("Inverse eQTM", "Positive eQTM", "Non-eQTM"))) %>%
+dist_plot <- modC_comp %>%
+  mutate(Direction = ifelse(!sigPair, "Non-eQTMs", ifelse(FC > 0, "Positive-eQTMs", "Inverse-eQTMs")),
+         Direction = factor(Direction, levels = c("Inverse-eQTMs", "Positive-eQTMs", "Non-eQTMs"))) %>%
   ggplot(aes(x = Distance, color = Direction)) + geom_density() + 
   theme_bw() + 
-  scale_color_manual(name = "CpG-TC pair type", values = c("#E69F00", "#009E73", "#000000")) +
+  scale_color_manual(name = "eQTM type", values = c("#E69F00", "#009E73", "#000000")) +
   scale_x_continuous(name = "CpG-TC TSS distance", 
                      breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
   scale_y_continuous(name = "Density") + 
   theme(plot.title = element_text(hjust = 0.5))
+png("paper/distance_distr.png", width = 2000, height = 1300, res = 300)
+dist_plot 
 dev.off()
 
 
 # Effect size ####
 summary(abs(subset(modC_comp, sigPair)$FC/10))
 mean(subset(modC_comp, sigPair)$FC/10 < 0.5)
-
-effectAll <- modC_comp %>%
-  filter(sigPair) %>%
-  mutate(Dir = ifelse(FC > 0, "Positive", "Inverse")) %>%
-  ggplot(aes(x = Dir, y = abs(FC/10), fill = Dir)) +
-  geom_boxplot() +
-  scale_y_continuous(limits = c(0, 0.5), name = "abs(log2 FC)/10% Methylation") +
-  theme_bw() +
-  scale_x_discrete(name = "eQTM Effect Direction") +
-  theme(legend.position = "none")
 
 ks.test(abs(subset(sigDf, FC > 0)$FC)/10,
         abs(subset(sigDf, FC < 0)$FC)/10)
@@ -317,20 +302,27 @@ modC_comp %>%
 
 
 # Distance vs Effect size
-png("paper/distance_effect.png", width = 2000, height = 1300, res = 300)
-modC_comp %>%
+dist_eff <- modC_comp %>%
   filter(sigPair) %>%
-  mutate(Direction = ifelse(FC > 0, "Positive", "Inverse")) %>%
+  mutate(Direction = ifelse(FC > 0, "Positive-eQTMs", "Inverse-eQTMs")) %>%
   ggplot(aes(x = Distance, y = FC/10, color = Direction)) + 
   geom_point(alpha = 0.1) + 
   theme_bw() + 
   scale_color_manual(name = "eQTM type", 
-                     breaks = c("Inverse", "Positive"),
+                     breaks = c("Inverse-eQTMs", "Positive-eQTMs"),
                      values = c("#E69F00", "#009E73")) +
   scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
   scale_y_continuous(name = "log2 FC/0.1 Methylation") + 
   theme(plot.title = element_text(hjust = 0.5))
+
+png("paper/distance_effect.png", width = 2000, height = 1300, res = 300)
+dist_eff
+dev.off()
+
+
+png("paper/distance_effect_panel.png", width = 2000, height = 1500, res = 300)
+plot_grid(dist_plot, dist_eff, labels = "AUTO", nrow = 2)
 dev.off()
 
 png("paper/distance_effect_reviewer.png", width = 2000, height = 1300, res = 300)
@@ -386,7 +378,10 @@ modC_comp %>%
   lm(abs(FC) ~ log10(abs(Distance+0.1)), .) %>%
   summary()
 
-
+modC_comp %>%
+  filter(sigPair) %>%
+  filter(abs(Distance) < 10e3) %>%
+  summarize(n = sum(abs(FC) > 20))
 
 ## Illumina Annotation ####
 modC_Annot <- modC %>%
@@ -447,7 +442,7 @@ annotated %>%
             P = mean(found))
 
 
-# Enrichment by gene position based on annotation ####
+# Enrichment of pairs with matching annotation ####
 modC_Annot <- modC_Annot %>%
   mutate(gene_match = sapply(seq_len(n()), function(x) any(GeneAffy[[x]] %in% UCSC_RefGene_Name[[x]])))
 
@@ -455,6 +450,7 @@ t <- table(modC_Annot$sigPair, modC_Annot$gene_match)
 t[1]/t[2]/t[3]*t[4]
 chisq.test(t)
 
+# Enrichment by gene position based on annotation ####
 ## Expand CpGs and TCs to make all pairs between CpG Gene and TC
 ## Restrict pairs where CpG gene and TC gene match
 modC_gene_pairs <- modC_Annot %>%
@@ -532,9 +528,9 @@ convertORmat <- function(OR){
 }
 
 png("paper/CpGEnrichGenePosition.png", width = 3000, height = 2000, res = 300)
-rbind(convertORmat(ORs) %>% mutate(type = "All eQTMs"),
-      convertORmat(ORsInv) %>% mutate(type = "Inverse"),
-      convertORmat(ORsPos) %>% mutate(type = "Positive")) %>%
+rbind(convertORmat(ORs) %>% mutate(type = "all-eQTMs"),
+      convertORmat(ORsInv) %>% mutate(type = "Inverse-eQTMs"),
+      convertORmat(ORsPos) %>% mutate(type = "Positive-eQTMs")) %>%
   spread(vars, value) %>%
   mutate(Region = factor(Region, levels = gpos)) %>%
   ggplot(aes(x = type, y = OR, fill = Region)) + 
@@ -722,9 +718,9 @@ age_var_comb <- rbind(comb_cont_Age, combAge) %>%
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "Change in methylation", limits = ageG) +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("All eQTMs", "Inverse eQTMs", "Positive eQTMs")) +
+  scale_x_discrete(name = "Change in methylation with age", limits = ageG) +
+  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
   theme_bw() +
   facet_grid(~ dataset)
 
@@ -741,9 +737,9 @@ age_var_comb_rel <- rbind(comb_cont_Age_reliability, combAge_rel) %>%
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "Change in methylation", limits = ageG) +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("All eQTMs", "Inverse eQTMs", "Positive eQTMs")) +
+  scale_x_discrete(name = "Change in methylation with age", limits = ageG) +
+  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
   theme_bw() +
   facet_grid(~ dataset)
 
@@ -766,30 +762,6 @@ left_join(select(agedf, CpG, Dir),
   summarize(m = mean(concordant))
 
 
-png("paper/CpGEnrich_ageVar_methLevels.png", width = 3000, height = 1500, res = 300)
-as_tibble(methyAnnot) %>%
-  mutate(CpG = Name) %>%
-  select(CpG, median) %>%
-  left_join(select(CpGsSum, CpG, Type)) %>%
-  mutate(Significant = ifelse(Type == "Non-significant", "non-eQTMs", "eQTMs")) %>%
-  left_join(dplyr::select(agedf, Dir, CpG), by = "CpG") %>%
-  mutate(Xu = ifelse(is.na(Dir), "Constant", Dir))  %>%
-  select(-Dir) %>%
-  left_join(dplyr::select(epideltadf, Dir, CpG), by = "CpG") %>%
-  mutate(Epidelta = Dir) %>%
-  filter(!is.na(Significant) & !is.na(Epidelta)) %>%
-  select(Xu, Epidelta, CpG, median, Significant) %>%
-  gather(Database, Status, 1:2) %>%
-  mutate(Database = ifelse(Database == "Xu", "MeDALL", "Epidelta"),
-         Database = factor(Database, levels = c("MeDALL", "Epidelta"))) %>%
-  ggplot(aes(x = Status, y = median, fill = Significant)) +
-  geom_violin() +
-  scale_x_discrete(name = "Change in methylation") +
-  scale_y_continuous(name = "Median methylation") +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#FFFFFF")) +
-  facet_grid(~ Database) +
-  theme_bw()
-dev.off()
 
 
 png("paper/CpGEnrich_ageVar_reliability_cont.png", width = 3000, height = 1500, res = 300)
@@ -874,72 +846,6 @@ monocytes.merge.uniq %>% group_by(sigType2) %>% summarize(rFC = cor(FC, beta),
                                                      signConc = mean(sign(FC) == sign(beta)))
 table(blood.merge.uniq$sigType2)
 table(monocytes.merge.uniq$sigType2)
-
-
-
-#### Whole blood plots
-pWBFC <- blood.merge %>%
-  ggplot(aes(x = FC/10, y = beta, color = sigType)) +
-  geom_point() +
-  geom_abline(slope = 1, linetype = "dashed") +
-  scale_x_continuous(name = "Main model") + 
-  scale_y_continuous("Kennedy (Whole Blood)") + 
-  ggtitle("Estimates comparative") +
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "none") +
-#  scale_color_manual(name = "", values = c("#85C0F9", "#F5793A", "#0F2080")) +
-  facet_wrap(. ~ sigType) +
-  geom_smooth(method = "lm") 
-
-
-pWBpval <- blood.merge %>%
-  ggplot(aes(x = -log10(p.value), y = -log10(p.val), color = sigType)) +
-  geom_point() +
-  geom_abline(slope = 1, linetype = "dashed") +
-  scale_x_continuous(name = "Main model") + 
-  scale_y_continuous("Kennedy (Whole Blood)") + 
-  ggtitle("-log10 p-value comparative") +
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "none") +
-  #  scale_color_manual(name = "", values = c("#85C0F9", "#F5793A", "#0F2080")) +
-  facet_wrap(. ~ sigType)
-
-#### Monocyte plots
-pMONFC <- monocytes.merge %>%
-  ggplot(aes(x = FC/10, y = beta, color = sigType)) +
-  geom_point() +
-  geom_abline(slope = 1, linetype = "dashed") +
-  scale_x_continuous(name = "Main model") + 
-  scale_y_continuous("Kennedy (Monocytes)") + 
-  ggtitle("Estimates comparative") +
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "none") +
-  #  scale_color_manual(name = "", values = c("#85C0F9", "#F5793A", "#0F2080")) +
-  facet_wrap(. ~ sigType) +
-  geom_smooth(method = "lm") 
-
-
-pMONpval <- monocytes.merge %>%
-  ggplot(aes(x = -log10(p.value), y = -log10(p.val), color = sigType)) +
-  geom_point() +
-  geom_abline(slope = 1, linetype = "dashed") +
-  scale_x_continuous(name = "Main model") + 
-  scale_y_continuous("Kennedy (Monocytes)") + 
-  ggtitle("-log10 p-value comparative") +
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "none") +
-  #  scale_color_manual(name = "", values = c("#85C0F9", "#F5793A", "#0F2080")) +
-  facet_wrap(. ~ sigType)
-
-
-png("paper/ComparisonKennedyEQTM.png", width = 2500, height = 2000, res = 300)
-plot_grid(pWBFC, pWBpval, pMONFC, pMONpval, nrow = 2, ncol = 2, labels = c("A", "", "B", ""))
-dev.off()
-
 
 
 
@@ -1057,7 +963,7 @@ helix_over <- modC_Annot %>%
   euler(shape = "ellipse") %>%
   plot(fills = list(fill = c("cyan", "darksalmon", "darkseagreen"), alpha = 0.5),
        quantities = list(fontsize = 8), 
-       main = "Helix eQTMs in adult cohorts")
+       main = "HELIX eQTMs in adult cohorts")
 
 bottom <- plot_grid(adult_over, helix_over, labels = c("B", "C"))
 
@@ -1065,8 +971,7 @@ png("paper/AgeEffectPlot.png", width = 3000, height = 2000, res = 300)
 plot_grid(age_var_comb, bottom, ncol = 1, labels = c("A", ""))
 dev.off()
 
-## Compare with cell types  ####
-#### Prepare data in previous sections
+#### Prepare data in previous sections   ####
 childCpGs <- unique(modC_Annot[modC_Annot$adults == "Children", ]$CpG)
 sharedCpGs <- unique(modC_Annot[modC_Annot$adults == "Shared", ]$CpG)
 
@@ -1098,12 +1003,12 @@ sharedGenes.f <- setdiff(sharedGenes, childGenes)
 ## Compare with reliability ####
 png("paper/kenney_comparison_reliability.png", width = 2000, height = 1000, res = 300)
 data.frame(CpG = c(childCpGs, sharedCpGs), 
-           Type = rep(c("Children-specific eQTMs", "Age-shared eQTMs"), 
+           Type = rep(c("Child-specific eQTMs", "Age-shared eQTMs"), 
                       c(length(childCpGs), length(sharedCpGs)))) %>%
   left_join(dplyr::select(methyAnnot, CpG, Reliability), by = "CpG") %>%
   ggplot(aes(x = Type, y = Reliability, fill = Type)) +
   geom_boxplot() +
-  scale_x_discrete(name = "") +
+  scale_x_discrete(name = "eQTM type") +
   scale_y_continuous(name = "Probe reliability") +
   scale_fill_manual(name = "", values = c("#F8766D", "#00BFC4")) +
   theme_bw() +
@@ -1196,7 +1101,7 @@ chrom_adult <- chromSt_enrich_adult %>%
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  scale_fill_discrete(name = "CpG type") +
+  scale_fill_discrete(name = "eQTM type") +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "ROADMAP chromatin states") +
   facet_wrap(~ Group, scales = "free_x") +

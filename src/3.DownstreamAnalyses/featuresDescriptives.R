@@ -77,8 +77,9 @@ CpG_plot <- overDF_aut %>%
   group_by(CpG) %>%
   summarize(n = n()) %>%
   ggplot(aes(x = n)) + geom_histogram(binwidth = 10) +
-  scale_x_continuous("TCs paired with a CpG", limits = c(0, 1250)) +
+  scale_x_continuous("TCs per CpG", limits = c(0, 1250)) +
   scale_y_continuous("Number of CpGs")  +
+  geom_vline(aes(xintercept = median(n))) +
   ggtitle("CpGs pairing distribution") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
@@ -88,8 +89,9 @@ TC_plot <- overDF_aut %>%
   group_by(TC) %>%
   summarize(n = n()) %>%
   ggplot(aes(x = n)) + geom_histogram(binwidth = 10) +
-  scale_x_continuous("CpGs paired with each TC", limits = c(0, 1250)) +
+  scale_x_continuous("CpGs per TC", limits = c(0, 1250)) +
   scale_y_continuous("Number of TCs")  +
+  geom_vline(aes(xintercept = median(n))) +
   ggtitle("TCs pairing distribution") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
@@ -117,7 +119,7 @@ methyAnnot_aut %>%
   data.frame() %>%
   ggplot(aes(x = median_cat, y = meth_range)) + 
   geom_boxplot() +
-  scale_x_discrete(name = "Median methylation", labels = c("Low", "Medium", "High")) +
+  scale_x_discrete(name = "Categories of methylation levels", labels = c("Low", "Medium", "High")) +
   scale_y_continuous(name = "Methylation range") +
   theme_bw()
 dev.off()
