@@ -682,16 +682,20 @@ plot_grid(
 )
 dev.off()
 
-
+title <- ggdraw() + 
+  draw_label(
+    "Enrichment for regulatory elements",
+    fontface = 'bold')
 png("paper/enrich_combined.png", width = 3500, height = 3000, res = 300)
 plot_grid(
+  title,
   plot_grid(cpgPosPlot, methLevsPlot, labels = c("A", "C"), nrow = 1),
   chromStatesPlot, 
-  labels = c("", "B"), ncol = 1, rel_heights = c(1, 2)
+  labels = c("", "", "B"), ncol = 1, rel_heights = c(0.1, 1, 2)
 )
 dev.off()
 
-## Overlap with literature ####
+# Overlap with literature ####
 #### EWAS Catalog ####
 ewasdf <- read.delim(gzfile("data/EWAS_Catalog_03-07-2019.txt.gz"))
 
@@ -894,7 +898,8 @@ ewas_db.rel <- combCatal.rel %>%
   geom_bar(stat = "identity", position=position_dodge(), color = "black") + 
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
   scale_y_continuous(trans = "log2", 
-                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
+                     breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
+                     limits = c(0.9, 3.5)) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "eQTM type", labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
   scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73")) +

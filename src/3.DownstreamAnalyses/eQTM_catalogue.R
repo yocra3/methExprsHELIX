@@ -18,7 +18,6 @@ library(tidyr)
 library(S4Vectors)
 library(MultiDataSet)
 library(ggforce)
-library(FlowSorted.Blood.450k)
 library(GenomicRanges)
 library(BSgenome.Hsapiens.UCSC.hg19)
 library(limma)
@@ -30,10 +29,6 @@ load("results/preprocessFiles/methyAnnotation.Rdata")
 load("results/preprocessFiles/gexpAnnotation.Rdata")
 
 ## Change name when loading results
-load("results/MethComBatExpResidualsNoCellAdj/allres_simP_cpgs.Rdata")
-modU <- df
-featsU <- featStatsDF
-
 load("results/MethComBatExpResidualsCellAdj/allres_simP_cpgs.Rdata")
 modC <- df
 featsC <- featStatsDF
@@ -304,9 +299,10 @@ modC_comp %>%
 # Distance vs Effect size
 dist_eff <- modC_comp %>%
   filter(sigPair) %>%
-  mutate(Direction = ifelse(FC > 0, "Positive-eQTMs", "Inverse-eQTMs")) %>%
-  ggplot(aes(x = Distance, y = FC/10, color = Direction)) + 
-  geom_point(alpha = 0.1) + 
+  mutate(Direction = ifelse(FC > 0, "Positive-eQTMs", "Inverse-eQTMs"),
+         FCwind = ifelse(abs(FC) > quantile(abs(FC), 0.99), quantile(abs(FC), 0.99)*sign(FC), FC)) %>%
+  ggplot(aes(x = Distance, y = FCwind/10, color = Direction)) + 
+  geom_point(alpha = 0.15) + 
   theme_bw() + 
   scale_color_manual(name = "eQTM type", 
                      breaks = c("Inverse-eQTMs", "Positive-eQTMs"),
@@ -320,7 +316,6 @@ png("paper/distance_effect.png", width = 2000, height = 1300, res = 300)
 dist_eff
 dev.off()
 
-
 png("paper/distance_effect_panel.png", width = 2000, height = 1500, res = 300)
 plot_grid(dist_plot, dist_eff, labels = "AUTO", nrow = 2)
 dev.off()
@@ -330,8 +325,9 @@ modC_comp %>%
   filter(sigPair) %>%
   mutate(Direction = ifelse(FC > 0, "Positive", "Inverse"),
          Distance.dir = ifelse(Distance >= 0, +1, -1),
-         Distance = log10(abs(Distance + 0.1))*Distance.dir) %>%
-  ggplot(aes(x = Distance, y = FC/10, color = Direction)) + 
+         Distance = log10(abs(Distance) + 0.1)*Distance.dir,
+         FCabs = ifelse(abs(FC) > quantile(abs(FC), 0.99), quantile(abs(FC), 0.99), abs(FC))) %>%
+  ggplot(aes(x = Distance, y = FCabs/10, color = Direction)) + 
   geom_point(alpha = 0.1) + 
   theme_bw() + 
   scale_color_manual(name = "eQTM type", 
@@ -344,6 +340,17 @@ modC_comp %>%
   theme(plot.title = element_text(hjust = 0.5))
 dev.off()
 
+png("paper/distance_effect_reviewer2.png", width = 2000, height = 1300, res = 300)
+modC_comp %>%
+  filter(sigPair) %>%
+  mutate(DistanceQuant = cut(abs(Distance) + 0.1, c(0, 10, 100, 1e3, 1e4, 1e5, 5e5)),
+         FCabs = ifelse(abs(FC) > quantile(abs(FC), 0.95), quantile(abs(FC), 0.95), abs(FC))) %>%
+  ggplot(aes(x = DistanceQuant, y = abs(FCabs/10))) + 
+  geom_boxplot() + 
+  theme_bw() + 
+  scale_y_continuous(name = "log2 FC/0.1 Methylation") + 
+  theme(plot.title = element_text(hjust = 0.5))
+dev.off()
 
 png("paper/distance_pvalue_reviewer.png", width = 2000, height = 1300, res = 300)
 modC_comp %>%
@@ -369,19 +376,42 @@ modC_comp %>%
            y = pull(., FC),
            cot = .)
 
+## Correlation FC vs Distance
 modC_comp %>%
   filter(sigPair) %>%
   lm(abs(FC) ~ abs(Distance), .) %>%
   summary()
 modC_comp %>%
   filter(sigPair) %>%
-  lm(abs(FC) ~ log10(abs(Distance+0.1)), .) %>%
+  lm(abs(FC/10) ~ log10(abs(Distance)+0.1), .) %>%
   summary()
-
+modC_comp %>%
+  filter(sigPair & Distance > 0) %>%
+  lm(abs(FC) ~ log10(abs(Distance)+0.1), .) %>%
+  summary()
+modC_comp %>%
+  filter(sigPair & Distance < 0) %>%
+  lm(abs(FC) ~ log10(abs(Distance)+0.1), .) %>%
+  summary()
+modC_comp %>%
+  filter(sigPair) %>%
+  lm(abs(FC) ~ sign(Distance), .) %>%
+  summary()
 modC_comp %>%
   filter(sigPair) %>%
   filter(abs(Distance) < 10e3) %>%
   summarize(n = sum(abs(FC) > 20))
+
+
+modC_comp %>%
+  filter(sigPair) %>%
+  mutate(type = ifelse(abs(Distance) < 10, "Close", 
+                       ifelse(abs(Distance) < 1e3, "Cis", "Distant")),
+         distQuant = cut(log10(abs(Distance) + 1), 5)) %>%
+  group_by(distQuant) %>%
+  summarize(m = median(abs(FC)),
+            n = n())
+
 
 ## Illumina Annotation ####
 modC_Annot <- modC %>%

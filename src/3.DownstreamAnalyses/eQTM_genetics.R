@@ -60,8 +60,10 @@ herm <- h2df %>%
   inner_join(CpGsNum, h2df, by = "CpG") 
 
 h2tot <- herm %>%
-  ggplot(aes(x = nCat, y = h2_total)) + 
+  mutate(type = ifelse(nCat == 0, "non-eQTMs", "eQTMs")) %>%
+  ggplot(aes(x = nCat, y = h2_total, fill = type)) + 
   geom_boxplot() +
+  scale_fill_manual(values=c("grey", "white")) +
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
   scale_x_discrete(name = "Number of TCs associated with a CpG") +
   scale_y_continuous(name = "Total heritability", limits = c(0, 1)) +
@@ -70,8 +72,10 @@ h2tot <- herm %>%
         legend.position = "none")
 
 h2SNP <- herm %>%
-  ggplot(aes(x = nCat, y = h2_SNPs)) + 
-  geom_boxplot() + 
+  mutate(type = ifelse(nCat == 0, "non-eQTMs", "eQTMs")) %>%
+  ggplot(aes(x = nCat, y = h2_SNPs, fill = type)) + 
+  geom_boxplot() +
+  scale_fill_manual(values=c("grey", "white")) +
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
   scale_x_discrete(name = "Number of TCs associated with a CpG") +
   scale_y_continuous(name = "SNP heritability", limits = c(0, 1)) +
@@ -111,8 +115,10 @@ herm %>%
 
 h2tot.rel <- herm %>%
   filter(!is.na(Reliability) & Reliability >= 0.4) %>%
-  ggplot(aes(x = nCat, y = h2_total)) + 
+  mutate(type = ifelse(nCat == 0, "non-eQTMs", "eQTMs")) %>%
+  ggplot(aes(x = nCat, y = h2_total, fill = type)) + 
   geom_boxplot() +
+  scale_fill_manual(values=c("grey", "white")) +
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
   scale_x_discrete(name = "Number of TCs associated with a CpG") +
   scale_y_continuous(name = "Total heritability", limits = c(0, 1)) +
@@ -122,8 +128,10 @@ h2tot.rel <- herm %>%
 
 h2SNP.rel <- herm %>%
   filter(!is.na(Reliability) & Reliability >= 0.4) %>%
-  ggplot(aes(x = nCat, y = h2_SNPs)) + 
-  geom_boxplot() + 
+  mutate(type = ifelse(nCat == 0, "non-eQTMs", "eQTMs")) %>%
+  ggplot(aes(x = nCat, y = h2_SNPs, fill = type)) + 
+  geom_boxplot() +
+  scale_fill_manual(values=c("grey", "white")) +
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
   scale_x_discrete(name = "Number of TCs associated with a CpG") +
   scale_y_continuous(name = "SNP heritability", limits = c(0, 1)) +
@@ -238,8 +246,10 @@ meQTL_p <- CpGsNum %>%
   mutate(mQTL = CpG %in% comCpGs) %>%
   group_by(nCat) %>%
   summarize(prop = mean(mQTL)*100) %>%
-  ggplot(aes(x = nCat, y = prop)) +
-  geom_bar(position = "dodge", stat = "identity") +
+  mutate(type = ifelse(nCat == 0, "non-eQTMs", "eQTMs")) %>%
+  ggplot(aes(x = nCat, y = prop,  fill = type)) +
+  geom_bar(position = "dodge", stat = "identity", color = "black") +
+  scale_fill_manual(values=c("grey", "white")) +
   scale_x_discrete(name = "Number of TCs associated with a CpG") +
   scale_y_continuous(name = "CpGs with meQTLs (%)") +
   theme_bw() +
@@ -276,8 +286,10 @@ meQTL_p_rel <- CpGsNum %>%
   mutate(mQTL = CpG %in% comCpGs) %>%
   group_by(nCat) %>%
   summarize(prop = mean(mQTL)*100) %>%
-  ggplot(aes(x = nCat, y = prop)) +
-  geom_bar(position = "dodge", stat = "identity") +
+  mutate(type = ifelse(nCat == 0, "non-eQTMs", "eQTMs")) %>%
+  ggplot(aes(x = nCat, y = prop,  fill = type)) +
+  geom_bar(position = "dodge", stat = "identity", color = "black") +
+  scale_fill_manual(values=c("grey", "white")) +
   scale_x_discrete(name = "Number of TCs associated with a CpG") +
   scale_y_continuous(name = "CpGs with meQTLs (%)") +
   theme_bw() +
@@ -285,6 +297,20 @@ meQTL_p_rel <- CpGsNum %>%
 
 png("paper/eQTMs_meqtlProp_rel.png", width = 2000, height = 1000, res = 300)
 meQTL_p_rel
+dev.off()
+
+## meQTLs vs reliability
+png("paper/eQTMs_genetics_reliability.png", width = 2000, height = 1000, res = 300)
+
+CpGsNum %>%
+  filter(nTC > 0) %>%
+  mutate(mQTL = ifelse(CpG %in% comCpGs, "With meQTLs", "Without meQTLs")) %>%
+  ggplot(aes(x = mQTL, y = Reliability)) +
+  geom_boxplot() +
+  scale_x_discrete(name = "eQTM type") +
+  scale_y_continuous(name = "Probe reliability") +
+  theme_bw() +
+  theme(legend.position = "none")
 dev.off()
 
 
