@@ -381,8 +381,8 @@ methLevsPlot <- combMethLevs %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Categories of methylation levels", limits = cats, labels = tools::toTitleCase(cats)) +
-  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
+  scale_fill_manual(name = "eCpG type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All", "Inverse", "Positive")) +
   theme_bw() 
 
 png("paper/CpGEnrich_methLevels.png", width = 3000, height = 2000, res = 300)
@@ -426,8 +426,8 @@ methLevsPlot.rel <- Reduce(rbind, typesMethLevs.rel) %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Categories of methylation levels", limits = cats, labels = tools::toTitleCase(cats)) +
-  scale_fill_manual(name = "CpG type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
+  scale_fill_manual(name = "eCpG type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All", "Inverse", "Positive")) +
   theme_bw() 
 
 png("paper/CpGEnrich_methLevels_rel.png", width = 3000, height = 2000, res = 300)
@@ -476,8 +476,8 @@ cpgPosPlot <- combIsland %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "CpG island relative position", limits = islandStates) +
-  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
+  scale_fill_manual(name = "eCpG type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All", "Inverse", "Positive")) +
   theme_bw() 
 
 png("paper/CpGEnrichIsland.png", width = 3000, height = 2000, res = 300)
@@ -521,8 +521,8 @@ cpgPosPlot.rel <- Reduce(rbind, typesIsland.rel) %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "CpG island relative position", limits = islandStates) +
-  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
+  scale_fill_manual(name = "eCpG type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All", "Inverse", "Positive")) +
   theme_bw() 
 
 png("paper/CpGEnrichIsland_rel.png", width = 3000, height = 2000, res = 300)
@@ -531,7 +531,7 @@ dev.off()
 
 
 
-## Chromatin states ####
+# Chromatin states ####
 chromStates <- c("TssA", "TssAFlnk", "TxFlnk", "TxWk", "Tx", "EnhG", "Enh",
                  "ZNF.Rpts", "Het", "TssBiv", "BivFlnk", "EnhBiv", "ReprPC",
                  "ReprPCWk", "Quies")
@@ -596,8 +596,8 @@ chromStatesPlot <- combChromSt %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "ROADMAP chromatin states") +
-  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
+  scale_fill_manual(name = "eCpG type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All", "Inverse", "Positive")) +
   facet_wrap(~ Group, scales = "free_x") +
   theme_bw() 
 
@@ -664,8 +664,8 @@ chromStatesPlot.rel <- Reduce(rbind, typesChromSt.rel) %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "ROADMAP chromatin states") +
-  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
+  scale_fill_manual(name = "eCpG type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All", "Inverse", "Positive")) +
   facet_wrap(~ Group, scales = "free_x") +
   theme_bw() 
 
@@ -851,8 +851,8 @@ ewas_db <- combCatal %>%
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "eQTM type", labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
-  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73")) +
+  scale_x_discrete(name = "eCpG type", labels = c("All", "Inverse", "Positive")) +
+  scale_fill_manual(name = "eCpG type", values = c("#999999", "#E69F00", "#009E73")) +
   theme_bw() +
   theme(legend.position = "none",
         plot.title = element_text(hjust = 0.5)) +
@@ -901,8 +901,8 @@ ewas_db.rel <- combCatal.rel %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2)),
                      limits = c(0.9, 3.5)) +
   geom_hline(yintercept = 1) +
-  scale_x_discrete(name = "eQTM type", labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
-  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73")) +
+  scale_x_discrete(name = "eCpG type", labels = c("All", "Inverse", "Positive")) +
+  scale_fill_manual(name = "eCpG type", values = c("#999999", "#E69F00", "#009E73")) +
   theme_bw() +
   theme(legend.position = "none",
         plot.title = element_text(hjust = 0.5)) +

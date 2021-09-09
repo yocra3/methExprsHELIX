@@ -307,7 +307,7 @@ CpGsNum %>%
   mutate(mQTL = ifelse(CpG %in% comCpGs, "With meQTLs", "Without meQTLs")) %>%
   ggplot(aes(x = mQTL, y = Reliability)) +
   geom_boxplot() +
-  scale_x_discrete(name = "eQTM type") +
+  scale_x_discrete(name = "eCpG type") +
   scale_y_continuous(name = "Probe reliability") +
   theme_bw() +
   theme(legend.position = "none")

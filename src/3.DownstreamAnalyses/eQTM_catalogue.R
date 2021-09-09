@@ -141,7 +141,7 @@ t[1]/t[2]/t[3]*t[4]
 
 png("paper/CpGVar_eQTMs.png", width = 2000, height = 1000, res = 300)
 featsC_var %>%
-  mutate(sigVar = ifelse(sig == "random", "non-eQTMs", "eQTMs")) %>%
+  mutate(sigVar = ifelse(sig == "random", "non eCpGs", "eCpGs")) %>%
   ggplot(aes(x = sigVar, y = meth_range, fill = sigVar)) + 
   geom_boxplot() +
   theme_bw() +
@@ -167,7 +167,7 @@ wilcox.test(Reliability ~ sig, featsC_rel)
 
 png("paper/CpGReliability_eQTMs.png", width = 2000, height = 1000, res = 300)
 featsC_rel %>%
-  mutate(sigVar = ifelse(sig == "random", "non-eQTMs", "eQTMs")) %>%
+  mutate(sigVar = ifelse(sig == "random", "non-eCpGs", "eCpGs")) %>%
   ggplot(aes(x = sigVar, y = Reliability, fill = sigVar)) + 
   geom_boxplot() +
   theme_bw() +
@@ -182,7 +182,7 @@ dev.off()
 ### TC call rate
 int_TC <- expAnnot %>%
   dplyr::select(probeset_id, Expressed, CallRate) %>%
-  mutate(sig = ifelse(probeset_id %in% sigTCs, "TCs in eQTMs", "TCs not in eQTMs"))
+  mutate(sig = ifelse(probeset_id %in% sigTCs, "eGenes", "non-eGenes"))
 table(int_TC$CallRate < 90, int_TC$sig)
 
 chisq.test(table(int_TC$CallRate > 90, int_TC$sig))
@@ -262,8 +262,8 @@ modC_comp %>%
 
 ## Distance per direction + eQTM 
 dist_plot <- modC_comp %>%
-  mutate(Direction = ifelse(!sigPair, "Non-eQTMs", ifelse(FC > 0, "Positive-eQTMs", "Inverse-eQTMs")),
-         Direction = factor(Direction, levels = c("Inverse-eQTMs", "Positive-eQTMs", "Non-eQTMs"))) %>%
+  mutate(Direction = ifelse(!sigPair, "Non eQTMs", ifelse(FC > 0, "Positive", "Inverse")),
+         Direction = factor(Direction, levels = c("Inverse", "Positive", "Non eQTMs"))) %>%
   ggplot(aes(x = Distance, color = Direction)) + geom_density() + 
   theme_bw() + 
   scale_color_manual(name = "eQTM type", values = c("#E69F00", "#009E73", "#000000")) +
@@ -299,13 +299,13 @@ modC_comp %>%
 # Distance vs Effect size
 dist_eff <- modC_comp %>%
   filter(sigPair) %>%
-  mutate(Direction = ifelse(FC > 0, "Positive-eQTMs", "Inverse-eQTMs"),
+  mutate(Direction = ifelse(FC > 0, "Positive", "Inverse"),
          FCwind = ifelse(abs(FC) > quantile(abs(FC), 0.99), quantile(abs(FC), 0.99)*sign(FC), FC)) %>%
   ggplot(aes(x = Distance, y = FCwind/10, color = Direction)) + 
   geom_point(alpha = 0.15) + 
   theme_bw() + 
   scale_color_manual(name = "eQTM type", 
-                     breaks = c("Inverse-eQTMs", "Positive-eQTMs"),
+                     breaks = c("Inverse", "Positive"),
                      values = c("#E69F00", "#009E73")) +
   scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
@@ -558,9 +558,9 @@ convertORmat <- function(OR){
 }
 
 png("paper/CpGEnrichGenePosition.png", width = 3000, height = 2000, res = 300)
-rbind(convertORmat(ORs) %>% mutate(type = "all-eQTMs"),
-      convertORmat(ORsInv) %>% mutate(type = "Inverse-eQTMs"),
-      convertORmat(ORsPos) %>% mutate(type = "Positive-eQTMs")) %>%
+rbind(convertORmat(ORs) %>% mutate(type = "All"),
+      convertORmat(ORsInv) %>% mutate(type = "Inverse"),
+      convertORmat(ORsPos) %>% mutate(type = "Positive")) %>%
   spread(vars, value) %>%
   mutate(Region = factor(Region, levels = gpos)) %>%
   ggplot(aes(x = type, y = OR, fill = Region)) + 
@@ -749,8 +749,8 @@ age_var_comb <- rbind(comb_cont_Age, combAge) %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Change in methylation with age", limits = ageG) +
-  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
+  scale_fill_manual(name = "eCpGs type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All", "Inverse", "Positive")) +
   theme_bw() +
   facet_grid(~ dataset)
 
@@ -768,8 +768,8 @@ age_var_comb_rel <- rbind(comb_cont_Age_reliability, combAge_rel) %>%
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "Change in methylation with age", limits = ageG) +
-  scale_fill_manual(name = "eQTM type", values = c("#999999", "#E69F00", "#009E73"),
-                    labels = c("All-eQTMs", "Inverse-eQTMs", "Positive-eQTMs")) +
+  scale_fill_manual(name = "eCpGs type", values = c("#999999", "#E69F00", "#009E73"),
+                    labels = c("All", "Inverse", "Positive")) +
   theme_bw() +
   facet_grid(~ dataset)
 
@@ -1033,12 +1033,12 @@ sharedGenes.f <- setdiff(sharedGenes, childGenes)
 ## Compare with reliability ####
 png("paper/kenney_comparison_reliability.png", width = 2000, height = 1000, res = 300)
 data.frame(CpG = c(childCpGs, sharedCpGs), 
-           Type = rep(c("Child-specific eQTMs", "Age-shared eQTMs"), 
+           Type = rep(c("Child-specific eCpGs", "Age-shared eCpGs"), 
                       c(length(childCpGs), length(sharedCpGs)))) %>%
   left_join(dplyr::select(methyAnnot, CpG, Reliability), by = "CpG") %>%
   ggplot(aes(x = Type, y = Reliability, fill = Type)) +
   geom_boxplot() +
-  scale_x_discrete(name = "eQTM type") +
+  scale_x_discrete(name = "eCpG type") +
   scale_y_continuous(name = "Probe reliability") +
   scale_fill_manual(name = "", values = c("#F8766D", "#00BFC4")) +
   theme_bw() +
@@ -1090,7 +1090,7 @@ meQTL_Sum <- data.frame(CpG = c(childCpGs, sharedCpGs),
  sum2 <- function(x) sum(!x, na.rm = TRUE)
  
 chromSt_adult <-  data.frame(CpG = c(childCpGs, sharedCpGs),
-                             eQTM = rep(c("Child-specific eQTMs", "Age-shared eQTMs"),
+                             eQTM = rep(c("Child-specific eCpGs", "Age-shared eCpGs"),
                                         c(length(childCpGs), length(sharedCpGs)))) %>%
   rbind(data.frame(CpG = filter(methyAnnot, !Name %in% .$CpG)$Name,
                    eQTM = "None")) %>%
@@ -1100,7 +1100,7 @@ chromSt_adult <-  data.frame(CpG = c(childCpGs, sharedCpGs),
   summarize_at(chromStates, list(sum = sum, sum2 = sum2, prop = mean))
 
 
-chromSt_enrich_adult <- lapply(c("Child-specific eQTMs", "Age-shared eQTMs"), function(t){
+chromSt_enrich_adult <- lapply(c("Child-specific eCpGs", "Age-shared eCpGs"), function(t){
   rbind(filter(chromSt_adult, eQTM == t),
         filter(chromSt_adult, eQTM == "None")) %>%
     select(ends_with("sum"), ends_with("sum2")) %>%
@@ -1131,7 +1131,7 @@ chrom_adult <- chromSt_enrich_adult %>%
   geom_errorbar(position=position_dodge(.9), width=.25, aes(ymin = ORlow, ymax = ORhigh)) +
   scale_y_continuous(trans = "log2", 
                      breaks = scales::trans_breaks("log2", function(x) round(2^x, 2))) +
-  scale_fill_discrete(name = "eQTM type") +
+  scale_fill_discrete(name = "eCpG type") +
   geom_hline(yintercept = 1) +
   scale_x_discrete(name = "ROADMAP chromatin states") +
   facet_wrap(~ Group, scales = "free_x") +
