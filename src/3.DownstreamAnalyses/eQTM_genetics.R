@@ -60,24 +60,24 @@ herm <- h2df %>%
   inner_join(CpGsNum, h2df, by = "CpG") 
 
 h2tot <- herm %>%
-  mutate(type = ifelse(nCat == 0, "non-eQTMs", "eQTMs")) %>%
+  mutate(type = ifelse(nCat == 0, "non eQTMs", "eQTMs")) %>%
   ggplot(aes(x = nCat, y = h2_total, fill = type)) + 
   geom_boxplot() +
   scale_fill_manual(values=c("grey", "white")) +
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
-  scale_x_discrete(name = "Number of TCs associated with a CpG") +
+  scale_x_discrete(name = "Number of Genes associated with a CpG") +
   scale_y_continuous(name = "Total heritability", limits = c(0, 1)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
         legend.position = "none")
 
 h2SNP <- herm %>%
-  mutate(type = ifelse(nCat == 0, "non-eQTMs", "eQTMs")) %>%
+  mutate(type = ifelse(nCat == 0, "non eQTMs", "eQTMs")) %>%
   ggplot(aes(x = nCat, y = h2_SNPs, fill = type)) + 
   geom_boxplot() +
   scale_fill_manual(values=c("grey", "white")) +
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
-  scale_x_discrete(name = "Number of TCs associated with a CpG") +
+  scale_x_discrete(name = "Number of Genes associated with a CpG") +
   scale_y_continuous(name = "SNP heritability", limits = c(0, 1)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
@@ -115,12 +115,12 @@ herm %>%
 
 h2tot.rel <- herm %>%
   filter(!is.na(Reliability) & Reliability >= 0.4) %>%
-  mutate(type = ifelse(nCat == 0, "non-eQTMs", "eQTMs")) %>%
+  mutate(type = ifelse(nCat == 0, "non eQTMs", "eQTMs")) %>%
   ggplot(aes(x = nCat, y = h2_total, fill = type)) + 
   geom_boxplot() +
   scale_fill_manual(values=c("grey", "white")) +
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
-  scale_x_discrete(name = "Number of TCs associated with a CpG") +
+  scale_x_discrete(name = "Number of Genes associated with a CpG") +
   scale_y_continuous(name = "Total heritability", limits = c(0, 1)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
@@ -128,18 +128,18 @@ h2tot.rel <- herm %>%
 
 h2SNP.rel <- herm %>%
   filter(!is.na(Reliability) & Reliability >= 0.4) %>%
-  mutate(type = ifelse(nCat == 0, "non-eQTMs", "eQTMs")) %>%
+  mutate(type = ifelse(nCat == 0, "non eQTMs", "eQTMs")) %>%
   ggplot(aes(x = nCat, y = h2_SNPs, fill = type)) + 
   geom_boxplot() +
   scale_fill_manual(values=c("grey", "white")) +
   geom_hline(yintercept = c(0.2, 0.5), linetype="dashed", colour = "blue") + 
-  scale_x_discrete(name = "Number of TCs associated with a CpG") +
+  scale_x_discrete(name = "Number of Genes associated with a CpG") +
   scale_y_continuous(name = "SNP heritability", limits = c(0, 1)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5),
         legend.position = "none")
 
-png("paper/eQTMs_heritability_rel.png", width = 3500, height = 1000, res = 300)
+png("paper/eQTMs_heritability_rel.png", width = 2500, height = 750, res = 300)
 plot_grid(h2tot.rel, h2SNP.rel, ncol = 2, labels = "AUTO")
 dev.off()
 
@@ -250,7 +250,7 @@ meQTL_p <- CpGsNum %>%
   ggplot(aes(x = nCat, y = prop,  fill = type)) +
   geom_bar(position = "dodge", stat = "identity", color = "black") +
   scale_fill_manual(values=c("grey", "white")) +
-  scale_x_discrete(name = "Number of TCs associated with a CpG") +
+  scale_x_discrete(name = "Number of Genes associated with a CpG") +
   scale_y_continuous(name = "CpGs with meQTLs (%)") +
   theme_bw() +
   theme(legend.position = "none")
@@ -286,11 +286,11 @@ meQTL_p_rel <- CpGsNum %>%
   mutate(mQTL = CpG %in% comCpGs) %>%
   group_by(nCat) %>%
   summarize(prop = mean(mQTL)*100) %>%
-  mutate(type = ifelse(nCat == 0, "non-eQTMs", "eQTMs")) %>%
+  mutate(type = ifelse(nCat == 0, "non eQTMs", "eQTMs")) %>%
   ggplot(aes(x = nCat, y = prop,  fill = type)) +
   geom_bar(position = "dodge", stat = "identity", color = "black") +
   scale_fill_manual(values=c("grey", "white")) +
-  scale_x_discrete(name = "Number of TCs associated with a CpG") +
+  scale_x_discrete(name = "Number of Genes associated with a CpG") +
   scale_y_continuous(name = "CpGs with meQTLs (%)") +
   theme_bw() +
   theme(legend.position = "none")

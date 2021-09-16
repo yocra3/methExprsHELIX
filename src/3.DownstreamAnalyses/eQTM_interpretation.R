@@ -478,7 +478,8 @@ cpgPosPlot <- combIsland %>%
   scale_x_discrete(name = "CpG island relative position", limits = islandStates) +
   scale_fill_manual(name = "eCpG type", values = c("#999999", "#E69F00", "#009E73"),
                     labels = c("All", "Inverse", "Positive")) +
-  theme_bw() 
+  theme_bw() +
+  theme(legend.position = "none")
 
 png("paper/CpGEnrichIsland.png", width = 3000, height = 2000, res = 300)
 cpgPosPlot
@@ -599,7 +600,8 @@ chromStatesPlot <- combChromSt %>%
   scale_fill_manual(name = "eCpG type", values = c("#999999", "#E69F00", "#009E73"),
                     labels = c("All", "Inverse", "Positive")) +
   facet_wrap(~ Group, scales = "free_x") +
-  theme_bw() 
+  theme_bw() +
+  theme(legend.position = "none")
 
 png("paper/CpGEnrichChromStates.png", width = 3000, height = 2000, res = 300)
 chromStatesPlot
@@ -686,7 +688,7 @@ title <- ggdraw() +
   draw_label(
     "Enrichment for regulatory elements",
     fontface = 'bold')
-png("paper/enrich_combined.png", width = 3500, height = 3000, res = 300)
+png("paper/enrich_combined.png", width = 2200, height = 1800, res = 300)
 plot_grid(
   title,
   plot_grid(cpgPosPlot, methLevsPlot, labels = c("A", "C"), nrow = 1),

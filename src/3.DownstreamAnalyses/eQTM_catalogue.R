@@ -89,23 +89,23 @@ CpG_plot <- sigDf %>%
   group_by(CpG) %>%
   summarize(n = n()) %>%
   ggplot(aes(x = n)) + geom_histogram(binwidth = 1) +
-  scale_x_continuous("TCs per CpG", limits = c(0, 50)) +
+  scale_x_continuous("eGenes per CpG", limits = c(0, 50)) +
   scale_y_continuous("Number of CpGs")  +
   geom_vline(aes(xintercept = median(n))) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5)) +
-  ggtitle("CpGs pairing distribution in cis-eQTMs")
+  ggtitle("CpGs pairing distribution in cis eQTMs")
 
 TC_plot <- sigDf %>%
   group_by(TC) %>%
   summarize(n = n()) %>%
   ggplot(aes(x = n)) + geom_histogram(binwidth = 1) +
-  scale_x_continuous("CpGs per TC", limits = c(0, 50)) +
-  scale_y_continuous("Number of TCs")  +
+  scale_x_continuous("CpGs per eGene", limits = c(0, 50)) +
+  scale_y_continuous("Number of eGenes")  +
   geom_vline(aes(xintercept = median(n))) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5)) +
-  ggtitle("TCs pairing distribution in cis-eQTMs")
+  ggtitle("eGenes pairing distribution in cis eQTMs")
 
 
 png("paper/eQTMs_CpGs_TC_distr.png", width = 2000, height = 1500, res = 300)
@@ -167,7 +167,7 @@ wilcox.test(Reliability ~ sig, featsC_rel)
 
 png("paper/CpGReliability_eQTMs.png", width = 2000, height = 1000, res = 300)
 featsC_rel %>%
-  mutate(sigVar = ifelse(sig == "random", "non-eCpGs", "eCpGs")) %>%
+  mutate(sigVar = ifelse(sig == "random", "non eCpGs", "eCpGs")) %>%
   ggplot(aes(x = sigVar, y = Reliability, fill = sigVar)) + 
   geom_boxplot() +
   theme_bw() +
@@ -182,7 +182,7 @@ dev.off()
 ### TC call rate
 int_TC <- expAnnot %>%
   dplyr::select(probeset_id, Expressed, CallRate) %>%
-  mutate(sig = ifelse(probeset_id %in% sigTCs, "eGenes", "non-eGenes"))
+  mutate(sig = ifelse(probeset_id %in% sigTCs, "eGenes", "non eGenes"))
 table(int_TC$CallRate < 90, int_TC$sig)
 
 chisq.test(table(int_TC$CallRate > 90, int_TC$sig))
@@ -195,9 +195,9 @@ int_TC %>%
   ggplot(aes(x = sig, y = CallRate, fill = sig)) + 
   geom_boxplot() +
   theme_bw() +
-  scale_x_discrete(name = "TC type") +
+  scale_x_discrete(name = "Gene type") +
   theme(legend.position = "none") +
-  scale_y_continuous(name = "TC call rate") +
+  scale_y_continuous(name = "Gene call rate") +
   scale_fill_manual(values = c("#999999", "#FFFFFF"))
 dev.off()
 
@@ -267,7 +267,7 @@ dist_plot <- modC_comp %>%
   ggplot(aes(x = Distance, color = Direction)) + geom_density() + 
   theme_bw() + 
   scale_color_manual(name = "eQTM type", values = c("#E69F00", "#009E73", "#000000")) +
-  scale_x_continuous(name = "CpG-TC TSS distance", 
+  scale_x_continuous(name = "CpG-Gene's TSS distance", 
                      breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
   scale_y_continuous(name = "Density") + 
@@ -307,7 +307,8 @@ dist_eff <- modC_comp %>%
   scale_color_manual(name = "eQTM type", 
                      breaks = c("Inverse", "Positive"),
                      values = c("#E69F00", "#009E73")) +
-  scale_x_continuous(breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
+  scale_x_continuous(name = "eCpG-eGene's TSS distance",
+                     breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
   scale_y_continuous(name = "log2 FC/0.1 Methylation") + 
   theme(plot.title = element_text(hjust = 0.5))
@@ -948,7 +949,7 @@ plot_all <- modC_comp %>% filter(sigPair == TRUE) %>%
   ggplot(aes(x = Distance, color = Type)) +
   geom_density() +
   theme_bw() + 
-  scale_x_continuous(name = "CpG-TC TSS distance",
+  scale_x_continuous(name = "eCpG-eGene's TSS distance",
                      breaks = c(-5e5, -2e5, 0, 2e5, 5e5), 
                      labels = c("-500Kb", "-250Kb", "0", "250Kb", "500Kb")) +
   scale_y_continuous(name = "Density") + 
